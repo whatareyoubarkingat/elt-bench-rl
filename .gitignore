@@ -1,0 +1,40 @@
+# macOS and editors
+.DS_Store
+.idea/
+.vscode/
+
+# Python environments and build artifacts
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local credentials
+.env
+.env.*
+!.env.example
+credentials/
+secrets/
+*_credential.json
+*_credentials.json
+*.pem
+*.key
+
+# Downloaded data, execution state, and experiment artifacts
+data/
+ground_truth/
+runs/
+checkpoints/
+logs/
+*.log
+*.duckdb
+*.duckdb.wal
+work/
