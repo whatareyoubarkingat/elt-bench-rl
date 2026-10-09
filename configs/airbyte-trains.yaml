@@ -1,0 +1,101 @@
+# Derived from ELT-Bench fcf3129df49ce5ce63ff46b2bbbbba1eaf9ec055; cars stream only.
+# https://github.com/uiuc-kang-lab/ELT-Bench (CC BY-SA 4.0).
+# This derived manifest remains under CC BY-SA 4.0.
+version: 6.33.4
+type: DeclarativeSource
+check:
+  type: CheckStream
+  stream_names:
+  - cars
+definitions:
+  streams:
+    cars:
+      type: DeclarativeStream
+      name: cars
+      retriever:
+        type: SimpleRetriever
+        paginator:
+          type: DefaultPaginator
+          page_size_option:
+            type: RequestOption
+            field_name: limit
+            inject_into: request_parameter
+          page_token_option:
+            type: RequestOption
+            field_name: offset
+            inject_into: request_parameter
+          pagination_strategy:
+            type: OffsetIncrement
+            page_size: 9973
+        requester:
+          $ref: '#/definitions/base_requester'
+          path: /trains/cars
+          http_method: GET
+        record_selector:
+          type: RecordSelector
+          extractor:
+            type: DpathExtractor
+            field_path: []
+      schema_loader:
+        type: InlineSchemaLoader
+        schema:
+          $ref: '#/schemas/cars'
+  base_requester:
+    type: HttpRequester
+    url_base: http://elt-api:5005
+streams:
+- $ref: '#/definitions/streams/cars'
+spec:
+  type: Spec
+  connection_specification:
+    type: object
+    $schema: http://json-schema.org/draft-07/schema#
+    required: []
+    properties: {}
+    additionalProperties: true
+schemas:
+  cars:
+    type: object
+    $schema: http://json-schema.org/schema#
+    properties:
+      id:
+        type:
+        - number
+        - 'null'
+      len:
+        type:
+        - string
+        - 'null'
+      roof:
+        type:
+        - string
+        - 'null'
+      shape:
+        type:
+        - string
+        - 'null'
+      sides:
+        type:
+        - string
+        - 'null'
+      wheels:
+        type:
+        - number
+        - 'null'
+      load_num:
+        type:
+        - number
+        - 'null'
+      position:
+        type:
+        - number
+        - 'null'
+      train_id:
+        type:
+        - number
+        - 'null'
+      load_shape:
+        type:
+        - string
+        - 'null'
+    additionalProperties: true

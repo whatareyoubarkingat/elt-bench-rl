@@ -1,0 +1,6 @@
+# The source API only needs these two build inputs. Source CSVs are mounted
+# separately, and evaluator ground truth must never enter its build context.
+**
+!configs/
+!configs/rest-api.Dockerfile
+!configs/rest-api-requirements.txt

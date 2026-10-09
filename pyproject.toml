@@ -8,7 +8,33 @@ version = "0.1.0"
 description = "An end-to-end ELT-Bench RLVR environment and Tinker training recipe."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "tinker-cookbook",
+    "duckdb>=1.4,<2",
+    "numpy>=1.26,<2",
+    "pandas>=2.2,<3",
+    "pyarrow==23.0.1", # Compatible with the benchmark's NumPy 1.x environment.
+    "PyYAML>=6,<7",
+    "requests>=2.32,<3",
+    "python-dotenv>=1,<2",
+    "snowflake-connector-python>=3,<5",
+    "dbt-snowflake>=1.9,<2",
+    "dbt-duckdb>=1.9,<2",
+    "gdown>=5,<6",
+    "pymongo>=4,<5",
+    "awscli>=1.35,<2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<10",
+    "pytest-asyncio>=0.23,<2",
+    "pytest-timeout>=2,<3",
+    "ruff>=0.4,<1",
+]
+
+[tool.uv.sources]
+tinker-cookbook = { path = "third_party/tinker-cookbook", editable = true }
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,38 @@
+name: elt-bench-rl
+
+services:
+  elt-api:
+    image: elt-bench-rl-api:local
+    build:
+      context: ..
+      dockerfile: configs/rest-api.Dockerfile
+      args:
+        HTTP_PROXY: ${ELT_BENCH_RL_CONTAINER_PROXY:-}
+        HTTPS_PROXY: ${ELT_BENCH_RL_CONTAINER_PROXY:-}
+    init: true
+    working_dir: /app
+    ports:
+      - "127.0.0.1:5005:5005"
+    volumes:
+      - type: bind
+        source: ../third_party/elt-bench/elt-docker/rest_api/app.py
+        target: /app/app.py
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../data/trains
+        target: /app/data/trains
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json, urllib.request; assert len(json.load(urllib.request.urlopen('http://127.0.0.1:5005/trains/cars', timeout=3))) == 63"
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5

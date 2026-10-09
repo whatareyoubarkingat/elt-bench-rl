@@ -1,0 +1,23 @@
+{
+  "elt-bench": {
+    "url": "https://github.com/uiuc-kang-lab/ELT-Bench.git",
+    "path": "third_party/elt-bench",
+    "revision": "fcf3129df49ce5ce63ff46b2bbbbba1eaf9ec055"
+  },
+  "tinker-cookbook": {
+    "url": "https://github.com/thinking-machines-lab/tinker-cookbook.git",
+    "path": "third_party/tinker-cookbook",
+    "revision": "cd008aacedbf0e6f7452b3ec106a345d29482ea5"
+  },
+  "dataset": {
+    "id": "tttjjj/elt_bench",
+    "revision": "52a48541547a4340e19e54386350740acca80146",
+    "task": "trains",
+    "warehouse": "snowflake"
+  },
+  "tokenizer": {
+    "id": "Qwen/Qwen3.5-4B",
+    "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+    "path": "data/tokenizers/Qwen3.5-4B"
+  }
+}

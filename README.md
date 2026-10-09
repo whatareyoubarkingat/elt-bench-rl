@@ -4,7 +4,20 @@ An end-to-end reinforcement learning with verifiable rewards (RLVR) environment 
 
 ## Status
 
-Project scaffold only. The ELT environment, execution verifier, official-task rollout, and Tinker training integration have not been implemented or validated yet.
+Development prerequisites are prepared: pinned upstream repositories, a locked
+Python environment, official `trains` data, tokenizer assets, and local service
+configuration. The ELT environment, execution verifier, official-task rollout,
+and Tinker training integration still need implementation.
+
+See [local setup](docs/setup.md) for installation, service commands, credential
+configuration, and verified results.
+
+```bash
+git clone --recurse-submodules https://github.com/whatareyoubarkingat/elt-bench-rl.git
+cd elt-bench-rl
+brew bundle --file Brewfile
+bash scripts/bootstrap.sh
+```
 
 ## Goal
 
@@ -30,14 +43,18 @@ The first proposed official task is `trains`. Local fixtures and official-task r
 ## Repository layout
 
 ```text
-configs/             Configuration examples to be added during implementation
-docs/                Initial design and references
+configs/             Credentials template, source services, pinned upstream revisions
+docs/                Design and local setup guide
+scripts/             Reproducible dependency/data setup and prerequisite checks
 src/elt_bench_rl/    Python package
 tests/               Acceptance-test plan
-pyproject.toml       Package metadata and build configuration
+third_party/         Pinned ELT-Bench and tinker-cookbook submodules
+pyproject.toml       Dependencies and package metadata
+uv.lock              Resolved Python dependency versions
 ```
 
-Python 3.11 or later is the initial development target. Runtime dependencies and upstream commits will be pinned when the integrations are implemented. There is no rollout or training command yet.
+Python 3.11 is the verified development target. Local setup does not download
+model weights or require a GPU. There is no ELT rollout or training command yet.
 
 ## References
 

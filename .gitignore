@@ -38,3 +38,10 @@ logs/
 *.duckdb
 *.duckdb.wal
 work/
+.local/
+data_api/
+dbt_packages/
+target/
+*.tfstate
+*.tfstate.*
+.terraform/
