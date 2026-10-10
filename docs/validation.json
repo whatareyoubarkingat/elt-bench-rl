@@ -1,0 +1,103 @@
+{
+  "validated_at_utc": "2026-10-10T02:40:55.527313+00:00",
+  "implementation_commit": "6d03d790981439724b582a2d98a3ddd3d2bc02a0",
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64",
+    "python": "3.11.13"
+  },
+  "dependencies": {
+    "tinker": "0.33.1",
+    "duckdb": "1.5.6",
+    "dbt-core": "1.12.5",
+    "dbt-duckdb": "1.11.0",
+    "dbt-databricks": "1.12.6",
+    "databricks-sql-connector": "4.4.0",
+    "databricks-sdk": "0.117.0"
+  },
+  "upstream_pins": {
+    "elt-bench": {
+      "url": "https://github.com/uiuc-kang-lab/ELT-Bench.git",
+      "path": "third_party/elt-bench",
+      "revision": "fcf3129df49ce5ce63ff46b2bbbbba1eaf9ec055"
+    },
+    "tinker-cookbook": {
+      "url": "https://github.com/thinking-machines-lab/tinker-cookbook.git",
+      "path": "third_party/tinker-cookbook",
+      "revision": "cd008aacedbf0e6f7452b3ec106a345d29482ea5"
+    },
+    "dataset": {
+      "id": "tttjjj/elt_bench",
+      "revision": "52a48541547a4340e19e54386350740acca80146",
+      "task": "trains",
+      "warehouse": "databricks"
+    },
+    "tokenizer": {
+      "id": "Qwen/Qwen3.5-4B",
+      "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "path": "data/tokenizers/Qwen3.5-4B"
+    }
+  },
+  "local_tests": {
+    "command": ".venv/bin/pytest -q tests",
+    "passed": 171,
+    "failed": 0,
+    "skipped": 0,
+    "duration_seconds": 34.95
+  },
+  "static_checks": {
+    "ruff_check": "passed",
+    "ruff_format": "passed",
+    "uv_lock_check": "passed",
+    "git_diff_check": "passed",
+    "configured_secret_scan": "no_matches"
+  },
+  "local_smoke": {
+    "validation": "credential_free_local_execution",
+    "passed": true,
+    "credentialed_official_rollout": "not_run",
+    "real_tinker_optimization": "not_run",
+    "correct": {
+      "scripted_agent": true,
+      "model_generated": false,
+      "reward": 1.0,
+      "loading": 1.0,
+      "target": 1.0,
+      "replay": 1.0,
+      "official_stage1": 1.0,
+      "official_stage2": 1.0,
+      "bundle_sha256": "8338e470838c64559beb197d7f015ed898cad79bd17359c8d64810ccee6e9cdd"
+    },
+    "incorrect": {
+      "scripted_agent": true,
+      "model_generated": false,
+      "reward": 0.6285714285714286,
+      "loading": 1.0,
+      "target": 0.8571428571428571,
+      "replay": 0.0,
+      "official_stage1": 1.0,
+      "official_stage2": 0.0,
+      "bundle_sha256": "aab944fa3213199b2af6347d5e4b79a0fd063bd78d17934df6c2800cc1419ded"
+    }
+  },
+  "standalone_replay": {
+    "strict": true,
+    "loading": 1.0,
+    "target": 1.0,
+    "official_stage1": true,
+    "official_stage2": true
+  },
+  "airbyte_local": {
+    "manifest_publication": "passed",
+    "published_manifest_readback": "exact_digest_match",
+    "source_check": "single_request_read_timeout",
+    "request_timeout_seconds": 120,
+    "discover": "not_run",
+    "sync": "not_run",
+    "remaining_temporary_sources": 0,
+    "published_definition_cache_retained": true
+  },
+  "credentialed_official_databricks_rollout": "not_run",
+  "real_tinker_optimization": "not_run",
+  "paid_tinker_or_databricks_calls": 0
+}

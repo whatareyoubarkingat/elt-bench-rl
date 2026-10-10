@@ -35,7 +35,12 @@ official metrics, frozen bundle hashes and episode paths. Each episode retains
 `tools.json`, `grade.json`, `pipeline.json`, dbt artifacts and replay evidence;
 warehouse files are cleaned. Runs are ignored because credentials, provider
 identifiers and task data should not be automatically published. A sanitized
-release record is kept in `validation.json`.
+release record is kept in [validation.json](validation.json).
+
+Latest local validation (2026-10-10): **171 tests passed**, no failures or skips;
+Ruff, formatting, dependency-lock and configured-secret checks passed. The
+implementation revision is `6d03d790981439724b582a2d98a3ddd3d2bc02a0`. The smoke
+command and a separate replay CLI invocation both passed against that commit.
 
 Tests cover isolation, repeat loading, actual error repair, clean replay,
 row-order independence, missing columns, duplicate keys, timeouts, forged old
