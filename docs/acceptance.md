@@ -38,10 +38,14 @@ warehouse files are cleaned. Runs are ignored because credentials, provider
 identifiers and task data should not be automatically published. A sanitized
 release record is kept in [validation.json](validation.json).
 
-Latest local validation (2026-10-10): **171 tests passed**, no failures or skips;
-Ruff, formatting, dependency-lock and configured-secret checks passed. The
-implementation revision is `6d03d790981439724b582a2d98a3ddd3d2bc02a0`. The smoke
-command and a separate replay CLI invocation both passed against that commit.
+Latest local-route validation (2026-10-10): **176 tests passed**, no failures or
+skips, with cloud Python packages absent. Ruff, formatting, dependency-lock
+and configured-secret checks passed. Runtime revision
+`209028a6116b858b48aac90b556c08d0ee076718` passed the official-data smoke and a
+separate replay CLI invocation without a manually started source service.
+The sanitized record is [local-route-validation.json](local-route-validation.json).
+The earlier 171-test cloud-route development record remains in
+[validation.json](validation.json) as historical evidence.
 
 Tests cover isolation, repeat loading, actual error repair, clean replay,
 row-order independence, missing columns, duplicate keys, timeouts, forged old

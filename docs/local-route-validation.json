@@ -1,0 +1,149 @@
+{
+  "validated_at_utc": "2026-10-10T07:21:04.935140+00:00",
+  "implementation_commit": "209028a6116b858b48aac90b556c08d0ee076718",
+  "default_route": {
+    "destination": "duckdb",
+    "loader": "local_csv_http",
+    "transform": "dbt-duckdb",
+    "source_service": "ephemeral_python_http",
+    "docker_required": false
+  },
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64",
+    "python": "3.11.13"
+  },
+  "dependencies": {
+    "tinker": "0.33.1",
+    "duckdb": "1.5.6",
+    "dbt-core": "1.12.5",
+    "dbt-duckdb": "1.11.0"
+  },
+  "cloud_python_packages_installed": false,
+  "local_tests": {
+    "command": "uv run --locked pytest -q tests",
+    "passed": 176,
+    "failed": 0,
+    "skipped": 0,
+    "duration_seconds": 37.594
+  },
+  "static_checks": {
+    "ruff_check": "passed",
+    "ruff_format": "passed",
+    "uv_lock_check": "passed",
+    "git_diff_check": "passed",
+    "configured_secret_scan": "no_matches"
+  },
+  "local_smoke": {
+    "validation": "credential_free_local_execution",
+    "passed": true,
+    "source_revision": "209028a6116b858b48aac90b556c08d0ee076718",
+    "date": "2026-10-10T07:20:04.767066+00:00",
+    "correct": {
+      "scripted_agent": true,
+      "model_generated": false,
+      "reward": 1.0,
+      "loading": 1.0,
+      "target": 1.0,
+      "replay": 1.0,
+      "official_stage1": 1.0,
+      "official_stage2": 1.0,
+      "bundle_sha256": "8338e470838c64559beb197d7f015ed898cad79bd17359c8d64810ccee6e9cdd"
+    },
+    "incorrect": {
+      "scripted_agent": true,
+      "model_generated": false,
+      "reward": 0.6285714285714286,
+      "loading": 1.0,
+      "target": 0.8571428571428571,
+      "replay": 0.0,
+      "official_stage1": 1.0,
+      "official_stage2": 0.0,
+      "bundle_sha256": "aab944fa3213199b2af6347d5e4b79a0fd063bd78d17934df6c2800cc1419ded"
+    },
+    "credentialed_official_rollout": "not_run",
+    "real_tinker_optimization": "not_run"
+  },
+  "standalone_replay": {
+    "strict": true,
+    "loading": 1.0,
+    "target": 1.0,
+    "official_stage1": true,
+    "official_stage2": true,
+    "details": {
+      "sources": {
+        "train": {
+          "matched_cells": 40,
+          "total_cells": 40,
+          "actual_rows": 20,
+          "expected_rows": 20,
+          "union_rows": 20,
+          "actual_columns": 2,
+          "expected_columns": 2,
+          "union_columns": 2,
+          "matched_key_rows": 20,
+          "missing_rows": 0,
+          "extra_rows": 0,
+          "missing_columns": 0,
+          "extra_columns": 0,
+          "actual_duplicate_key_rows": 0,
+          "expected_duplicate_key_rows": 0,
+          "actual_invalid_key_rows": 0,
+          "expected_invalid_key_rows": 0,
+          "actual_duplicate_columns": 0,
+          "expected_duplicate_columns": 0
+        },
+        "cars": {
+          "matched_cells": 630,
+          "total_cells": 630,
+          "actual_rows": 63,
+          "expected_rows": 63,
+          "union_rows": 63,
+          "actual_columns": 10,
+          "expected_columns": 10,
+          "union_columns": 10,
+          "matched_key_rows": 63,
+          "missing_rows": 0,
+          "extra_rows": 0,
+          "missing_columns": 0,
+          "extra_columns": 0,
+          "actual_duplicate_key_rows": 0,
+          "expected_duplicate_key_rows": 0,
+          "actual_invalid_key_rows": 0,
+          "expected_invalid_key_rows": 0,
+          "actual_duplicate_columns": 0,
+          "expected_duplicate_columns": 0
+        }
+      },
+      "targets": {
+        "trains": {
+          "matched_cells": 140,
+          "total_cells": 140,
+          "actual_rows": 20,
+          "expected_rows": 20,
+          "union_rows": 20,
+          "actual_columns": 7,
+          "expected_columns": 7,
+          "union_columns": 7,
+          "matched_key_rows": 20,
+          "missing_rows": 0,
+          "extra_rows": 0,
+          "missing_columns": 0,
+          "extra_columns": 0,
+          "actual_duplicate_key_rows": 0,
+          "expected_duplicate_key_rows": 0,
+          "actual_invalid_key_rows": 0,
+          "expected_invalid_key_rows": 0,
+          "actual_duplicate_columns": 0,
+          "expected_duplicate_columns": 0
+        }
+      },
+      "official_stage1": true,
+      "official_stage2": true
+    }
+  },
+  "credentialed_official_rollout": "not_run",
+  "real_tinker_optimization": "not_run",
+  "grader_acceptance_of_tinker_credentialed_duckdb_rollout": "unconfirmed",
+  "paid_tinker_or_warehouse_calls": 0
+}
