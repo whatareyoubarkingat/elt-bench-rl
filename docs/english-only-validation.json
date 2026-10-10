@@ -1,0 +1,83 @@
+{
+  "validated_at_utc": "2026-10-10T08:24:37.295884+00:00",
+  "implementation_commit": "85adec55f5825c38af63d7a328cd146f2d02ee24",
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64",
+    "python": "3.11.13"
+  },
+  "upstream_storage": "outside_project_in_pinned_external_cache",
+  "cookbook_installed_source": {
+    "url": "https://github.com/thinking-machines-lab/tinker-cookbook.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "cd008aacedbf0e6f7452b3ec106a345d29482ea5",
+      "requested_revision": "cd008aacedbf0e6f7452b3ec106a345d29482ea5"
+    }
+  },
+  "local_tests": {
+    "passed": 193,
+    "failed": 0,
+    "skipped": 0,
+    "duration_seconds": 41.107
+  },
+  "local_prerequisites": {
+    "ready": true,
+    "checks": 28
+  },
+  "native_report": {
+    "title": "ELT-Bench RLVR: Implementation Design and Validation",
+    "url": "https://docs.google.com/document/d/1SWoXsokaq7h7AoHn0ud66ymrli8wtcF7yN_bWqMuZUc",
+    "han_characters": 0,
+    "heading_count": 6,
+    "hyperlink_count": 4,
+    "body_matches_english_markdown": true
+  },
+  "static_checks": {
+    "ruff": "passed",
+    "format": "passed",
+    "uv_lock": "passed",
+    "git_diff": "passed",
+    "configured_secret_scan": "no_matches"
+  },
+  "local_smoke": {
+    "validation": "credential_free_local_execution",
+    "passed": true,
+    "source_revision": "85adec55f5825c38af63d7a328cd146f2d02ee24",
+    "date": "2026-10-10T08:23:35.128545+00:00",
+    "correct": {
+      "scripted_agent": true,
+      "model_generated": false,
+      "reward": 1.0,
+      "loading": 1.0,
+      "target": 1.0,
+      "replay": 1.0,
+      "official_stage1": 1.0,
+      "official_stage2": 1.0,
+      "bundle_sha256": "8338e470838c64559beb197d7f015ed898cad79bd17359c8d64810ccee6e9cdd"
+    },
+    "incorrect": {
+      "scripted_agent": true,
+      "model_generated": false,
+      "reward": 0.6285714285714286,
+      "loading": 1.0,
+      "target": 0.8571428571428571,
+      "replay": 0.0,
+      "official_stage1": 1.0,
+      "official_stage2": 0.0,
+      "bundle_sha256": "aab944fa3213199b2af6347d5e4b79a0fd063bd78d17934df6c2800cc1419ded"
+    },
+    "credentialed_official_rollout": "not_run",
+    "real_tinker_optimization": "not_run"
+  },
+  "credentialed_official_rollout": "not_run",
+  "real_tinker_optimization": "not_run",
+  "paid_calls": 0,
+  "repository_language_scan": {
+    "scope": "all_current_project_files_tracked_or_not_ignored",
+    "text_files_checked": 74,
+    "han_content_matches": 0,
+    "han_path_matches": 0,
+    "non_utf8_files_skipped": 0
+  }
+}

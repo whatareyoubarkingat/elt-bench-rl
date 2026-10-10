@@ -39,7 +39,16 @@ warehouse files are cleaned. Runs are ignored because credentials, provider
 identifiers and task data should not be automatically published. A sanitized
 release record is kept in [validation.json](validation.json).
 
-Latest local-route validation (2026-10-10): **176 tests passed**, no failures or
+Latest English-only validation (2026-10-10): **193 tests passed**, no failures or
+skips. All 74 current project text files and filenames have zero Han-character
+matches. The native report is entirely English, matches [report.md](report.md),
+and retains six section headings and four links. Fixed upstream checkouts are
+outside the project repository; the same official comparator bytes and source
+pins are preserved. Runtime revision `85adec55f5825c38af63d7a328cd146f2d02ee24`
+passed the official-data smoke with rewards 1.0 and 0.6285714285714286 and clean
+replay. See [english-only-validation.json](english-only-validation.json).
+
+Previous local-route validation (2026-10-10): **176 tests passed**, no failures or
 skips, with cloud Python packages absent. Ruff, formatting, dependency-lock
 and configured-secret checks passed. Runtime revision
 `209028a6116b858b48aac90b556c08d0ee076718` passed the official-data smoke and a
