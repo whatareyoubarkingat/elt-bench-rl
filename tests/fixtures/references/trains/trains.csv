@@ -1,0 +1,5 @@
+train_id,direction,run_east_and_has_less_than_4_cars,has_more_than_2_long_cars,has_double_sided_cars_in_3rd_position,has_rectangular_shaped_head_cars,number_of_open_roof_car
+101,east,1,1,1,1,2
+102,west,0,0,0,0,0
+103,east,1,0,0,1,1
+104,west,0,0,0,0,0

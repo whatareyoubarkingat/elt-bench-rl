@@ -1,7 +1,14 @@
-# Acceptance tests to implement
+# Tests
 
-1. **Local integration:** execute extraction, loading, transformation, feedback, submission, and grading with a small deterministic fixture and DuckDB. Include an incorrect pipeline and verify episode isolation.
-2. **Official rollout:** run at least one official ELT-Bench task against the supported warehouse and retain the submitted pipeline, tool trace, and execution results.
-3. **Tinker optimization:** collect model-generated trajectories, derive rewards from execution, and retain evidence of a real optimizer step. Report zero group reward variance explicitly because an optimizer call alone does not demonstrate an effective RL learning signal.
+`uv run --locked pytest -q tests` is credential-free and requires no Docker.
+Fixtures contain four synthetic trains with a separate trusted target file.
+Tests start a real HTTP server and execute real DuckDB/dbt pipelines.
 
-These are planned tests, not implemented or passing tests.
+Coverage: feedback/repair, replay, correct vs wrong rewards, replacement loading,
+contamination, budgets, key/value/null comparison, duplicate keys/columns,
+missing/extra rows/columns, stale CSV spoofing, path/schema restrictions,
+Jinja/shell/extension denial, and Cookbook masks/advantages/optimizer/checkpoints.
+Cloud/GPU clients are mocked where explicitly labeled.
+
+Cloud acceptance is separate (`docs/running.md`). Offline tests never prove a
+Databricks sync or real Tinker parameter update.

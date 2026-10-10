@@ -1,8 +1,9 @@
 # Local setup on macOS
 
-This setup prepares the code, dependencies, source data, and local services for
-implementation. It does not establish that an ELT environment, official rollout,
-or Tinker RL optimization has been implemented or passed its acceptance test.
+This guide restores dependencies, data and local services. The ELT environment,
+execution verifier and RL recipe are implemented; credential-free execution
+has passed. A credentialed Databricks rollout and real Tinker optimization
+remain unrun. See [running.md](running.md) and [acceptance.md](acceptance.md).
 Local preparation requires CPU, memory, and disk; no local GPU or model weights
 are needed.
 
@@ -10,11 +11,11 @@ are needed.
 
 - Apple Silicon (`arm64`) Python 3.11, `uv`, and the project's `.venv`.
 - Python dependencies resolved by `uv.lock`, including Tinker, the cookbook,
-  DuckDB, Snowflake connectivity, dbt, and development tools.
+  DuckDB, Databricks connectivity, dbt, and development tools.
 - Homebrew tools listed in `Brewfile`: Docker CLI/plugins, Colima, `abctl`,
   Terraform, and PostgreSQL's `psql` client (`libpq`).
 - The two upstream repositories as submodules at fixed commits.
-- The small official `trains` source files and Snowflake ground truth.
+- The small official `trains` source files and Databricks ground truth.
 - A pinned Qwen tokenizer and tool-call renderer prerequisites, without weights.
 - A dedicated Colima profile and a project Docker wrapper.
 
@@ -31,7 +32,7 @@ The tokenizer selection prepares local formatting checks. A usable Tinker model
 still needs to be confirmed with an authorized Tinker account.
 
 The official task specification is already available under
-`third_party/elt-bench/elt-bench/snowflake/trains/`; source schemas are under
+`third_party/elt-bench/elt-bench/databricks/trains/`; source schemas are under
 `third_party/elt-bench/elt-bench/schemas/trains/`. The evaluation query is
 `third_party/elt-bench/evaluation/sql/trains/trains.sql`; it reads the submitted
 result rather than providing a reference transformation.
@@ -52,7 +53,7 @@ bash scripts/bootstrap.sh
 
 The bootstrap initializes pinned submodules, runs `uv sync --locked` with
 Python 3.11, downloads the selected data/tokenizer, and performs local checks.
-It does not deploy Airbyte, contact Snowflake, or start Tinker training.
+It does not deploy Airbyte, contact Databricks, or start Tinker training.
 
 The individual commands are:
 
@@ -75,7 +76,7 @@ the virtualenv has not been activated in the shell.
 | --- | ---: | ---: |
 | `data/trains/train.csv` | 20 | 164 |
 | `data/trains/cars.csv` | 63 | 3,289 |
-| `ground_truth/gt_snowflake/trains/trains.csv` | 20 | 565 |
+| `ground_truth/gt_databricks/trains/trains.csv` | 20 | 565 |
 
 `scripts/fetch_trains_data.py` downloads only these selected official assets.
 It uses HTTP ranges to obtain `cars.csv` from the source API ZIP without
@@ -83,7 +84,7 @@ downloading the full archive. Downloads are checked against pinned SHA-256
 hashes and row counts. Provenance is recorded in `data/manifest.json`.
 
 The ground truth is stored separately from source data. It is trusted verifier
-material and must remain unavailable to the model during future rollouts.
+material and remains unavailable through model tools.
 
 `scripts/fetch_tokenizer.py` prepares tokenizer/config/template files under
 `data/tokenizers/Qwen3.5-4B` (about 23 MB), with no model weights. The offline
@@ -182,11 +183,12 @@ Verified on the prepared Apple M3 Mac on 2026-10-09:
 | `trains` source API | Healthy; 63 rows, source IDs and columns verified |
 | Airbyte-to-source network | Manifest-server Pod read all 63 rows via `http://elt-api:5005/trains/cars` |
 
-The task-specific manifest is prepared, but connector publication and Airbyte
-source/check/sync integration remain part of implementation. A trial of the
-public declarative-definition creation API returned HTTP 409 without a detailed
-cause; this does not establish a successful connector registration. The local
-service and direct source access checks above passed independently.
+The task-specific manifest and source/check/sync APIs are implemented. The
+prepared Airbyte installation initially returned HTTP 409 on publication;
+the [scoped local seed repair](airbyte-seed-repair.md) restored publication.
+The subsequent single source check timed out; its temporary source was cleaned.
+See [acceptance](acceptance.md) for the exact boundary. No real Databricks sync
+has been claimed.
 
 Python 3.11.13, Tinker 0.33.1, Torch 2.14.1, DuckDB 1.5.6, dbt-core 1.12.5,
 and Snowflake connector 4.8.0 were imported or checked successfully. NumPy is
@@ -220,16 +222,15 @@ cp -n configs/.env.example .env
 Fill in `.env` locally:
 
 - Tinker: `TINKER_API_KEY`.
-- Snowflake: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PASSWORD`,
-  `SNOWFLAKE_WAREHOUSE`, and the desired database/role.
+- Databricks: `DATABRICKS_HOST`, `DATABRICKS_HTTP_PATH`, `DATABRICKS_CATALOG`,
+  `DATABRICKS_CLIENT_ID`, and `DATABRICKS_CLIENT_SECRET` (OAuth M2M).
 - Airbyte: `AIRBYTE_CLIENT_ID`, `AIRBYTE_CLIENT_SECRET`, and
   `AIRBYTE_WORKSPACE_ID`. The example points `AIRBYTE_URL` to the local service.
 - Docker context: `ELT_BENCH_RL_DOCKER_CONTEXT` defaults to
   `colima-elt-bench-rl`.
 
-The prerequisite checker recognizes `SNOWFLAKE_PRIVATE_KEY_PATH` as an
-alternative credential-presence signal, but does not validate authentication
-or implement the future warehouse adapter's authentication behavior.
+The prerequisite checker reports credential presence only. It does not
+validate account access or execute paid requests.
 
 ```bash
 .venv/bin/python scripts/check_prereqs.py
@@ -250,8 +251,7 @@ credential presence as booleans only, without authenticating or using paid APIs.
 - `--skip-docker`: explicitly leaves Docker and `abctl` unverified and checks
   the Python/data subset.
 
-Without Snowflake credentials, a real official Snowflake rollout cannot be
-validated. Without Tinker credentials, a real RL optimization step cannot be
-performed. Preparation checks and upstream smoke tests do not satisfy these
-acceptance criteria; the environment, execution verifier, and training recipe
-must still be implemented and tested.
+Without Databricks credentials/budget, the official cloud rollout remains
+unvalidated. Tinker key presence does not establish balance/access or a real
+optimization step. Local integration and offline recipe tests are implemented;
+actual credentialed acceptance remains explicitly separate.

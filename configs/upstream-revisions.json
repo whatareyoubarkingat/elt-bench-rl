@@ -13,7 +13,7 @@
     "id": "tttjjj/elt_bench",
     "revision": "52a48541547a4340e19e54386350740acca80146",
     "task": "trains",
-    "warehouse": "snowflake"
+    "warehouse": "databricks"
   },
   "tokenizer": {
     "id": "Qwen/Qwen3.5-4B",

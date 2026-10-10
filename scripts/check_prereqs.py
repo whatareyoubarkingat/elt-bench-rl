@@ -38,6 +38,8 @@ PACKAGES = (
     ("datasets", "datasets"),
     ("huggingface_hub", "huggingface-hub"),
     ("snowflake.connector", "snowflake-connector-python"),
+    ("databricks.sql", "databricks-sql-connector"),
+    ("databricks.sdk", "databricks-sdk"),
     ("pytest", "pytest"),
     ("requests", "requests"),
     ("yaml", "PyYAML"),
@@ -46,7 +48,7 @@ PACKAGES = (
 SUBMODULES = ("third_party/elt-bench", "third_party/tinker-cookbook")
 DATA_FILES = {
     "sources": {"data/trains/train.csv", "data/trains/cars.csv"},
-    "ground_truth": {"ground_truth/gt_snowflake/trains/trains.csv"},
+    "ground_truth": {"ground_truth/gt_databricks/trains/trains.csv"},
 }
 
 
@@ -269,6 +271,8 @@ def credential_checks() -> dict:
         "SNOWFLAKE_SCHEMA", "SNOWFLAKE_ROLE", "AIRBYTE_CLIENT_ID", "AIRBYTE_CLIENT_SECRET",
         "AIRBYTE_WORKSPACE_ID",
         "HF_TOKEN",
+        "DATABRICKS_HOST", "DATABRICKS_HTTP_PATH", "DATABRICKS_CATALOG",
+        "DATABRICKS_CLIENT_ID", "DATABRICKS_CLIENT_SECRET",
     )
     presence = {name: bool(str(values.get(name) or "").strip()) for name in names}
     tinker_ready = presence["TINKER_API_KEY"]
@@ -279,11 +283,14 @@ def credential_checks() -> dict:
     )
     airbyte_ready = (presence["AIRBYTE_CLIENT_ID"] and presence["AIRBYTE_CLIENT_SECRET"]
                      and presence["AIRBYTE_WORKSPACE_ID"])
+    databricks_ready = all(presence[name] for name in ("DATABRICKS_HOST", "DATABRICKS_HTTP_PATH",
+                         "DATABRICKS_CATALOG", "DATABRICKS_CLIENT_ID", "DATABRICKS_CLIENT_SECRET"))
     return {
-        "status": "ready" if tinker_ready and snowflake_ready and airbyte_ready else "missing_credential",
+        "status": "ready" if tinker_ready and databricks_ready and airbyte_ready else "missing_credential",
         "presence": presence,
         "tinker_config_present": tinker_ready,
         "snowflake_config_present": snowflake_ready,
+        "databricks_config_present": databricks_ready,
         "airbyte_config_present": airbyte_ready,
         "env_file_error_type": env_file_error,
         "verified": False,

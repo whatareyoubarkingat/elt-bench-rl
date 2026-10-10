@@ -20,10 +20,17 @@ dependencies = [
     "snowflake-connector-python>=3,<5",
     "dbt-snowflake>=1.9,<2",
     "dbt-duckdb>=1.9,<2",
+    "dbt-databricks>=1.9,<2",
+    "databricks-sql-connector>=4,<5",
+    "databricks-sdk>=0.60,<1",
+    "sqlglot>=28,<30",
     "gdown>=5,<6",
     "pymongo>=4,<5",
     "awscli>=1.35,<2",
 ]
+
+[project.scripts]
+elt-rl = "elt_bench_rl.cli:main"
 
 [dependency-groups]
 dev = [

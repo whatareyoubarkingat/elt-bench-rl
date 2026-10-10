@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch and verify only the official ELT-Bench trains sources and Snowflake GT.
+"""Fetch and verify only the official ELT-Bench trains sources and destination GT.
 
 Uses Python's standard library and the system curl command. Source data and
 ground truth remain in separate ignored directories. Existing different files
@@ -205,7 +205,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--check-only", action="store_true", help="Verify existing assets and manifest without network or writes")
+    parser.add_argument("--destination", choices=["databricks", "snowflake", "redshift"], default="databricks")
     args = parser.parse_args()
+    # All three pinned trains references are byte-identical; fetch the requested
+    # destination's actual asset instead of relabeling another warehouse's GT.
+    ASSETS[2]["path"] = ASSETS[2]["path"].replace("gt_snowflake", f"gt_{args.destination}")
+    ASSETS[2]["url"] = ASSETS[2]["url"].replace("gt_snowflake", f"gt_{args.destination}")
     root = args.project_root.resolve()
     if not root.is_dir():
         raise RuntimeError(f"Project root does not exist: {root}")

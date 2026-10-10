@@ -1,0 +1,12 @@
+model_name: Qwen/Qwen3.5-4B
+group_size: 4
+lora_rank: 16
+learning_rate: 0.00001
+temperature: 1.0
+max_turns: 24
+max_sampled_tokens: 8192
+max_turn_tokens: 2048
+max_context_tokens: 32768
+max_steps: 1
+serial_episodes: 1
+max_constant_group_retries: 2

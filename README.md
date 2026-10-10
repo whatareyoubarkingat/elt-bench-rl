@@ -1,66 +1,91 @@
-# ELT-Bench RL
+# ELT-Bench RLVR
 
-An end-to-end reinforcement learning with verifiable rewards (RLVR) environment for ELT-Bench, using Tinker and reusing tinker-cookbook where practical.
+Stateful execution-graded ELT tasks with real CSV/HTTP extraction, dbt SQL,
+clean pipeline replay, and a [Tinker Cookbook](https://github.com/thinking-machines-lab/tinker-cookbook)
+RL recipe. Local execution uses DuckDB; the credentialed path uses Databricks
+and Airbyte. Upstream revisions and Python dependencies are pinned.
 
-## Status
-
-Development prerequisites are prepared: pinned upstream repositories, a locked
-Python environment, official `trains` data, tokenizer assets, and local service
-configuration. The ELT environment, execution verifier, official-task rollout,
-and Tinker training integration still need implementation.
-
-See [local setup](docs/setup.md) for installation, service commands, credential
-configuration, and verified results.
+## Run without credentials
 
 ```bash
 git clone --recurse-submodules https://github.com/whatareyoubarkingat/elt-bench-rl.git
 cd elt-bench-rl
-brew bundle --file Brewfile
-bash scripts/bootstrap.sh
+uv sync --locked --group dev --python 3.11
+uv run --locked pytest -q tests
+uv run --locked python scripts/fetch_trains_data.py
+uv run --locked elt-rl local-smoke --output runs/local-smoke
 ```
 
-## Goal
+Tests use committed synthetic fixtures and start their own source HTTP server.
+The smoke command uses pinned official `trains` source bytes and Databricks
+reference data, repairs a real dbt error, submits a frozen pipeline, and
+replays it in another empty DuckDB database. Neither command calls Tinker or
+requires Docker. The scripted demonstration is **not** a model-generated
+credentialed official rollout.
 
-Train a language model to inspect an ELT task, configure extraction and loading, implement transformations, use execution feedback, and submit a reproducible pipeline. Rewards must come from verification of the resulting warehouse state.
+## Acceptance status
 
-## Acceptance criteria
+| Requirement | Status |
+| --- | --- |
+| Credential-free integration: extraction, dbt, feedback and replay | Passed locally |
+| Different execution rewards for correct and incorrect pipelines | Passed: 1.0 vs 0.628571 |
+| Cookbook environment, reward and optimizer integration | Offline tests passed; injected clients are labeled |
+| Model-generated official Databricks rollout with actual Airbyte sync | Not run: needs Databricks credentials and a cloud budget |
+| Real Tinker optimization with nonzero advantages and model change | Not run: paid calls deliberately deferred |
 
-- [ ] Credential-free local integration test with actual data execution.
-- [ ] Credentialed end-to-end rollout on at least one official ELT-Bench task.
-- [ ] At least one real Tinker RL optimization step using execution-derived rewards.
-- [ ] Concise implementation design in a Google Doc and reproducible repository documentation.
+See [design](docs/design.md), [run commands](docs/running.md),
+[setup](docs/setup.md), and [validation boundaries](docs/acceptance.md).
 
-## Planned implementation
+## Environment
 
-- A task loader for official benchmark specifications and local test fixtures.
-- A stateful multi-turn environment with isolated resources for every episode.
-- Destination adapters: DuckDB for local tests and Snowflake for the first official rollout.
-- A trusted execution verifier with an explicit reward definition.
-- A training recipe that reuses tinker-cookbook rollout and training infrastructure.
+Tools: `read_task`, `inspect_source`, `configure_load`, `execute_load`,
+`list_tables`, `query`, `write_model`, `run_dbt`, `submit_pipeline`.
 
-The first proposed official task is `trains`. Local fixtures and official-task results will be reported separately.
+Each attempt starts empty. Tools execute sequentially. Raw data is writable only
+by the loader. Queries access only this episode; model files accept SQL and
+controlled literal `source`/`ref` references. Submission freezes logical loads
+and SQL, excludes credentials/runtime IDs, then executes from scratch in a new
+namespace. Every exit cleans owned warehouse resources.
 
-## Repository layout
+Terminal reward: `0.2 × loading + 0.5 × target + 0.3 × strict_replay`.
+Missing submissions receive zero. Loading checks receipts, schema and content;
+target reward requires every source to load correctly. Key-aligned cell scores
+penalize missing/extra rows/columns and duplicate keys. Fresh official Stage-1/2
+metrics are reported separately from the stronger reward rules.
+
+## Cloud commands (after choosing a budget)
+
+```bash
+cp -n configs/.env.example .env
+# Fill Databricks OAuth M2M, Airbyte and Tinker fields locally.
+bash scripts/start_sources.sh
+uv run --locked python scripts/fetch_tokenizer.py
+uv run --locked elt-rl preflight --destination databricks --online --allow-paid
+uv run --locked elt-rl rollout --destination databricks --allow-paid --output runs/official
+uv run --locked elt-rl train --destination duckdb --config configs/train.yaml --allow-paid --output runs/rl-one-step
+```
+
+The recipe reuses Cookbook rollouts, trajectory assembly, assistant token masks,
+reward-minus-group-mean advantages, `importance_sampling`, optimizer steps and
+checkpoint helpers. Defaults: Qwen3.5-4B, rank 16, four independent attempts,
+serial execution, one update. Constant groups are resampled at most twice;
+zero effective advantage means no update. Fixed action-token logprobs must
+change after optimization before success is reported. No local GPU or model
+weights are required.
+
+## Layout
 
 ```text
-configs/             Credentials template, source services, pinned upstream revisions
-docs/                Design and local setup guide
-scripts/             Reproducible dependency/data setup and prerequisite checks
-src/elt_bench_rl/    Python package
-tests/               Acceptance-test plan
-third_party/         Pinned ELT-Bench and tinker-cookbook submodules
-pyproject.toml       Dependencies and package metadata
-uv.lock              Resolved Python dependency versions
+src/elt_bench_rl/   Tasks, destinations, loaders, dbt, verifier, replay, RL recipe, CLI
+tests/             Offline fixtures, integration, safety, mock cloud/optimizer tests
+examples/          Human-written trains SQL demonstration
+configs/           Credential templates, training defaults, services, upstream pins
+scripts/           Locked installation and public data/tokenizer setup
+docs/              Implementation, operations and acceptance evidence
+third_party/       Pinned ELT-Bench and Tinker Cookbook submodules
 ```
 
-Python 3.11 is the verified development target. Local setup does not download
-model weights or require a GPU. There is no ELT rollout or training command yet.
-
-## References
-
-- [Task description](https://docs.google.com/document/d/1Rr9Y7wG93Fw-vEHgGMuALsIKZMyXO5zRPhlo4NtvrzQ/edit)
-- [Tinker documentation](https://tinker-docs.thinkingmachines.ai/tinker/)
-- [tinker-cookbook](https://github.com/thinking-machines-lab/tinker-cookbook)
-- [ELT-Bench paper](https://arxiv.org/abs/2504.04808)
-- [Official ELT-Bench repository](https://github.com/uiuc-kang-lab/ELT-Bench)
-- [DeepSeekMath / GRPO reference](https://arxiv.org/abs/2402.03300)
+Secrets, downloads, databases, tokenizers, logs and checkpoints are ignored.
+The [assignment](https://docs.google.com/document/d/1Rr9Y7wG93Fw-vEHgGMuALsIKZMyXO5zRPhlo4NtvrzQ/edit)
+requires a real credentialed rollout and a real RL update; these remain explicit
+future acceptance checks, not claims based on mocks.
