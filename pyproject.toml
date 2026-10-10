@@ -46,7 +46,7 @@ dev = [
 ]
 
 [tool.uv.sources]
-tinker-cookbook = { path = "third_party/tinker-cookbook", editable = true }
+tinker-cookbook = { git = "https://github.com/thinking-machines-lab/tinker-cookbook.git", rev = "cd008aacedbf0e6f7452b3ec106a345d29482ea5" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

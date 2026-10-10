@@ -215,10 +215,6 @@ def test_official_evaluator_pin_is_verified(monkeypatch):
     from elt_bench_rl import grading
     from elt_bench_rl.errors import InfrastructureError
 
-    grading._official_evaluator.cache_clear()
-    try:
-        monkeypatch.setattr(grading, "_OFFICIAL_STAGE2_SHA256", "not-the-source-hash")
-        with pytest.raises(InfrastructureError, match="pinned benchmark"):
-            official_comparison(reference(), reference(), ("id",))
-    finally:
-        grading._official_evaluator.cache_clear()
+    monkeypatch.setattr(grading, "_OFFICIAL_STAGE2_SHA256", "not-the-source-hash")
+    with pytest.raises(InfrastructureError, match="pinned benchmark"):
+        official_comparison(reference(), reference(), ("id",))

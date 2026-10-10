@@ -10,8 +10,9 @@ Upstream revisions and Python dependencies are pinned.
 ## Run without credentials
 
 ```bash
-git clone --recurse-submodules https://github.com/whatareyoubarkingat/elt-bench-rl.git
+git clone https://github.com/whatareyoubarkingat/elt-bench-rl.git
 cd elt-bench-rl
+python3 scripts/fetch_upstreams.py
 uv sync --locked --group dev --python 3.11
 uv run --locked pytest -q tests
 uv run --locked python scripts/fetch_trains_data.py
@@ -35,7 +36,7 @@ credentialed official rollout.
 | Model-generated rollout on the official `trains` task adapted to DuckDB | Not run: needs authorized real Tinker sampling |
 | Real Tinker optimization with nonzero advantages and model change | Not run: paid calls deliberately deferred |
 
-See [design](docs/design.md), [run commands](docs/running.md),
+See the [concise English report](docs/report.md), [design](docs/design.md), [run commands](docs/running.md),
 [setup](docs/setup.md), and [validation boundaries](docs/acceptance.md).
 
 ## Environment
@@ -91,10 +92,14 @@ examples/          Human-written trains SQL demonstration
 configs/           Credential templates, training defaults, services, upstream pins
 scripts/           Locked installation and public data/tokenizer setup
 docs/              Implementation, operations and acceptance evidence
-third_party/       Pinned ELT-Bench and Tinker Cookbook submodules
+External cache     Pinned upstream checkouts, outside the project repository
 ```
 
 Secrets, downloads, databases, tokenizers, logs and checkpoints are ignored.
+Project code, comments, prompts and documentation use English. Fixed upstream
+source checkouts live under `~/.cache/elt-bench-rl/upstreams` (override with
+`ELT_BENCH_RL_UPSTREAM_CACHE`); their multilingual examples are outside this
+repository. Cookbook is installed from its exact Git revision through `uv`.
 The [assignment](https://docs.google.com/document/d/1Rr9Y7wG93Fw-vEHgGMuALsIKZMyXO5zRPhlo4NtvrzQ/edit)
 requires a real credentialed rollout and a real RL update; these remain explicit
 future acceptance checks, not claims based on mocks.

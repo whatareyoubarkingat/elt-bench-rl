@@ -10,6 +10,11 @@ project_docker() {
 }
 
 cd "$PROJECT_ROOT"
+# Optional Docker VMs must be able to read the external cache as well as this project.
+# Include the upstream cache in the selected Colima profile's mounts when needed.
+ELT_BENCH_RL_ELT_BENCH_ROOT="$("$PROJECT_ROOT/.venv/bin/python" -c \
+  'from pathlib import Path; from elt_bench_rl.upstreams import resolve_upstream; print(resolve_upstream(Path.cwd(), "elt-bench"))')"
+export ELT_BENCH_RL_ELT_BENCH_ROOT
 if [[ -z "${ELT_BENCH_RL_CONTAINER_PROXY+x}" ]]; then
   ELT_BENCH_RL_CONTAINER_PROXY="$(project_docker info --format '{{.HTTPSProxy}}')"
   export ELT_BENCH_RL_CONTAINER_PROXY

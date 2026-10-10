@@ -1,12 +1,12 @@
 {
   "elt-bench": {
     "url": "https://github.com/uiuc-kang-lab/ELT-Bench.git",
-    "path": "third_party/elt-bench",
+    "cache_path": "elt-bench/fcf3129df49ce5ce63ff46b2bbbbba1eaf9ec055",
     "revision": "fcf3129df49ce5ce63ff46b2bbbbba1eaf9ec055"
   },
   "tinker-cookbook": {
     "url": "https://github.com/thinking-machines-lab/tinker-cookbook.git",
-    "path": "third_party/tinker-cookbook",
+    "cache_path": "tinker-cookbook/cd008aacedbf0e6f7452b3ec106a345d29482ea5",
     "revision": "cd008aacedbf0e6f7452b3ec106a345d29482ea5"
   },
   "dataset": {

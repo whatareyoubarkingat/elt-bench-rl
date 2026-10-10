@@ -53,7 +53,7 @@ CLOUD_PACKAGES = (
     ("databricks.sdk", "databricks-sdk"),
     ("dbt.adapters.databricks", "dbt-databricks"),
 )
-SUBMODULES = ("third_party/elt-bench", "third_party/tinker-cookbook")
+UPSTREAM_NAMES = ("elt-bench", "tinker-cookbook")
 DATA_FILES = {
     "sources": {"data/trains/train.csv", "data/trains/cars.csv"},
     "ground_truth": {"ground_truth/gt_databricks/trains/trains.csv"},
@@ -143,44 +143,83 @@ def python_checks(include_cloud: bool = False) -> list[dict]:
     return results
 
 
-def submodule_checks() -> list[dict]:
+def upstream_checks() -> list[dict]:
+    try:
+        from elt_bench_rl.upstreams import resolve_upstream
+
+        manifest = json.loads((ROOT / "configs/upstream-revisions.json").read_text())
+    except (ImportError, OSError, ValueError) as exc:
+        return [check("upstream_manifest", False, error_type=type(exc).__name__)]
     results = []
-    for path in SUBMODULES:
+    for name in UPSTREAM_NAMES:
         try:
-            pin = command(["git", "ls-files", "--stage", "--", path])
-            fields = pin.stdout.strip().split()
-            registered = (
-                pin.returncode == 0 and len(fields) >= 4 and fields[0] == "160000"
+            expected_sha = manifest[name]["revision"]
+            path = resolve_upstream(ROOT, name)
+            actual = command(
+                ["git", "--no-optional-locks", "-C", str(path), "rev-parse", "HEAD"]
             )
-            expected_sha = fields[1] if registered else None
-            actual = command(["git", "-C", str(ROOT / path), "rev-parse", "HEAD"])
             actual_sha = actual.stdout.strip() if actual.returncode == 0 else None
             if actual_sha and not re.fullmatch(r"[0-9a-f]{40,64}", actual_sha):
                 actual_sha = None
             dirty = command(
                 [
                     "git",
+                    "--no-optional-locks",
                     "-C",
-                    str(ROOT / path),
+                    str(path),
                     "status",
                     "--porcelain",
-                    "--untracked-files=no",
+                    "--untracked-files=all",
                 ]
             )
-            tracked_changes = dirty.returncode != 0 or bool(dirty.stdout.strip())
-            ready = registered and actual_sha == expected_sha and not tracked_changes
+            checkout_dirty = dirty.returncode != 0 or bool(dirty.stdout.strip())
+            ready = actual_sha == expected_sha and not checkout_dirty
             results.append(
                 check(
-                    path,
+                    name,
                     ready,
-                    registered=registered,
+                    cache_path=manifest[name]["cache_path"],
                     expected_sha=expected_sha,
                     actual_sha=actual_sha,
-                    tracked_changes=tracked_changes,
+                    checkout_dirty=checkout_dirty,
                 )
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            results.append(check(path, False, error_type=type(exc).__name__))
+        except Exception as exc:  # noqa: BLE001 - resolver failures are reported without arbitrary messages.
+            results.append(check(name, False, error_type=type(exc).__name__))
+    try:
+        distribution = importlib.metadata.distribution("tinker-cookbook")
+        origin = json.loads(distribution.read_text("direct_url.json") or "{}")
+        vcs = origin.get("vcs_info", {})
+        expected = manifest["tinker-cookbook"]
+        ready = (
+            origin.get("url") == expected["url"]
+            and vcs.get("vcs") == "git"
+            and vcs.get("commit_id") == expected["revision"]
+            and not origin.get("dir_info", {}).get("editable", False)
+        )
+        results.append(
+            check(
+                "tinker-cookbook_installed_origin",
+                ready,
+                version=distribution.version,
+                expected_sha=expected["revision"],
+                actual_sha=vcs.get("commit_id"),
+                pinned_git_source=ready,
+            )
+        )
+    except (
+        importlib.metadata.PackageNotFoundError,
+        OSError,
+        KeyError,
+        TypeError,
+        ValueError,
+        AttributeError,
+    ) as exc:
+        results.append(
+            check(
+                "tinker-cookbook_installed_origin", False, error_type=type(exc).__name__
+            )
+        )
     return results
 
 
@@ -498,7 +537,7 @@ def main() -> int:
     args = parser.parse_args()
     checks = (
         python_checks(args.check_cloud)
-        + submodule_checks()
+        + upstream_checks()
         + data_checks()
         + cli_checks(args.check_cloud)
     )
@@ -537,7 +576,10 @@ def main() -> int:
                 or item.get("error_type")
                 or ""
             )
-            if item["name"] in SUBMODULES:
+            if (
+                item["name"] in UPSTREAM_NAMES
+                or item["name"] == "tinker-cookbook_installed_origin"
+            ):
                 detail = f"expected={item.get('expected_sha')} actual={item.get('actual_sha')}"
             elif item["name"] == "docker" and item["status"] == "ready":
                 detail = f"context={item['context']} server={item['server_version']}"

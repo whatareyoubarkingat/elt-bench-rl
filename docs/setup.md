@@ -16,8 +16,8 @@ uv run --locked pytest -q tests
 uv run --locked elt-rl local-smoke --output runs/local-smoke
 ```
 
-Bootstrap initializes pinned submodules, installs the locked Python 3.11
-runtime, fetches selected public source/reference data and the tokenizer, and
+Bootstrap prepares pinned upstreams in an external cache, installs the locked
+Python 3.11 runtime, fetches selected public source/reference data and the tokenizer, and
 checks local dependencies. It makes no paid Tinker calls. `Brewfile` lists
 optional legacy service tools; `brew bundle` is not a default prerequisite.
 
@@ -47,6 +47,15 @@ existing source server is wanted.
 | Tinker Cookbook | `cd008aacedbf0e6f7452b3ec106a345d29482ea5` |
 | `tttjjj/elt_bench` data | `52a48541547a4340e19e54386350740acca80146` |
 | Qwen3.5-4B tokenizer | `851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a` |
+
+Upstream checkouts live under `~/.cache/elt-bench-rl/upstreams/<name>/<revision>`,
+outside the project repository. Override the cache location with
+`ELT_BENCH_RL_UPSTREAM_CACHE`; it must remain outside the project. Bootstrap
+creates and verifies these pinned checkouts. For a fresh clone, run
+`python3 scripts/fetch_upstreams.py` before tests or task execution. Runtime code
+checks the expected commit and rejects dirty or misplaced upstreams. Cookbook
+is installed from its fixed Git revision through `uv`, without an in-repository
+submodule.
 
 | Local asset | Rows |
 | --- | ---: |
@@ -92,3 +101,8 @@ They are not used by the default route. Existing Colima/Airbyte containers and
 volumes have been preserved; this migration does not stop or delete them.
 Historical service repair/probe outcomes are recorded in
 [acceptance.md](acceptance.md) and [airbyte-seed-repair.md](airbyte-seed-repair.md).
+
+The optional Docker source service binds `app.py` from the external cache.
+If the Colima profile mounts only the project directory, also mount the external
+cache read-only at the same absolute path before using that service. The default
+DuckDB route uses its own Python HTTP server and needs no Docker mount.

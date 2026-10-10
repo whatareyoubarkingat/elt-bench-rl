@@ -14,8 +14,9 @@ services:
     ports:
       - "127.0.0.1:5005:5005"
     volumes:
+      # An optional Docker VM needs read access to this external host cache path.
       - type: bind
-        source: ../third_party/elt-bench/elt-docker/rest_api/app.py
+        source: ${ELT_BENCH_RL_ELT_BENCH_ROOT:?Run scripts/start_sources.sh to resolve the external benchmark cache}/elt-docker/rest_api/app.py
         target: /app/app.py
         read_only: true
         bind:

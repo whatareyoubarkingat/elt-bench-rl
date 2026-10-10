@@ -25,11 +25,7 @@ PROJECT = Path(__file__).resolve().parents[1]
 def local_project(tmp_path):
     """Mirror checked-in fixtures only; no ignored downloads, Docker or keys."""
     root = tmp_path / "project"
-    (root / "third_party").mkdir(parents=True)
-    (root / "third_party/elt-bench").symlink_to(
-        PROJECT / "third_party/elt-bench", target_is_directory=True
-    )
-    (root / "configs").mkdir()
+    (root / "configs").mkdir(parents=True)
     shutil.copyfile(
         PROJECT / "configs/upstream-revisions.json",
         root / "configs/upstream-revisions.json",

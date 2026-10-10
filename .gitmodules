@@ -1,6 +1,0 @@
-[submodule "third_party/elt-bench"]
-	path = third_party/elt-bench
-	url = https://github.com/uiuc-kang-lab/ELT-Bench.git
-[submodule "third_party/tinker-cookbook"]
-	path = third_party/tinker-cookbook
-	url = https://github.com/thinking-machines-lab/tinker-cookbook.git

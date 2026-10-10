@@ -25,6 +25,7 @@ evidence of model-generated official success or a remote GPU update.
 ## Reproduce the local gate
 
 ```bash
+python3 scripts/fetch_upstreams.py
 uv sync --locked --group dev --python 3.11
 uv run --locked pytest -q tests
 uv run --locked python scripts/fetch_trains_data.py --destination databricks

@@ -6,6 +6,7 @@ without printing it. Keep secrets out of CLI arguments and public logs.
 ## Local execution
 
 ```bash
+python3 scripts/fetch_upstreams.py
 uv sync --locked --group dev --python 3.11
 uv run --locked pytest -q tests
 uv run --locked python scripts/fetch_trains_data.py --destination databricks

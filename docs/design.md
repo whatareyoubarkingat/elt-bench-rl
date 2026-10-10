@@ -25,6 +25,9 @@ flowchart LR
 `TaskSpec` reads the pinned benchmark's `config.yaml`, source schema descriptions,
 `data_model.yaml`, and sort keys. Connection examples and target references
 never enter the prompt. Trusted source caches and target references are separate.
+Fixed upstream repositories live in an external cache, outside this English-only
+project repository; runtime code verifies their revisions before use. Cookbook
+is installed from its exact Git revision through the dependency lock.
 
 `DestinationAdapter` owns namespace creation, queries, base-table reads,
 dbt profiles and cleanup. The default DuckDB path uses independent files with

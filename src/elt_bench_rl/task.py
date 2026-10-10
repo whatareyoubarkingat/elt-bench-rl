@@ -10,6 +10,8 @@ from pathlib import Path
 
 import yaml
 
+from .upstreams import resolve_upstream
+
 
 def identifier(value: str) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,62}", value):
@@ -115,7 +117,7 @@ def load_task(
     identifier(task_id)
     if destination not in {"databricks", "snowflake", "redshift"}:
         raise ValueError("Unsupported benchmark specification destination")
-    vendor = root / "third_party/elt-bench"
+    vendor = resolve_upstream(root, "elt-bench")
     config = yaml.safe_load(
         (vendor / "elt-bench" / destination / task_id / "config.yaml").read_text()
     )

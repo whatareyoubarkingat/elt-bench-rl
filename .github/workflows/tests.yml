@@ -5,12 +5,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
       - run: uv sync --locked --group dev --python 3.11
+      - run: uv run --locked python scripts/fetch_upstreams.py
       - run: uv run --locked pytest -q tests
       - run: uv run --locked ruff check src tests
       - run: uv run --locked ruff format --check src tests

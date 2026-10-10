@@ -13,7 +13,6 @@ from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from .errors import InfrastructureError
+from .upstreams import resolve_upstream
 
 OFFICIAL_BENCHMARK_REVISION = "fcf3129df49ce5ce63ff46b2bbbbba1eaf9ec055"
 _OFFICIAL_STAGE2_SHA256 = (
@@ -28,11 +28,10 @@ _OFFICIAL_STAGE2_SHA256 = (
 )
 
 
-@lru_cache(maxsize=1)
 def _official_evaluator():
     path = (
-        Path(__file__).resolve().parents[2]
-        / "third_party/elt-bench/evaluation/eva_stage2.py"
+        resolve_upstream(Path(__file__).resolve().parents[2], "elt-bench")
+        / "evaluation/eva_stage2.py"
     )
     try:
         source = path.read_bytes()
