@@ -11,7 +11,7 @@ result containing seven requested columns.
 flowchart LR
     Model --> Tools[Cookbook tool environment]
     Tools --> Episode[Isolated stateful episode]
-    Episode --> Loader[CSV / HTTP or Airbyte loader]
+    Episode --> Loader[Local CSV / HTTP loader]
     Loader --> Raw[Raw tables]
     Episode --> dbt[Controlled dbt models]
     Raw --> dbt --> Output[Transform tables]
@@ -27,12 +27,13 @@ flowchart LR
 never enter the prompt. Trusted source caches and target references are separate.
 
 `DestinationAdapter` owns namespace creation, queries, base-table reads,
-dbt profiles and cleanup. DuckDB uses independent files with `raw`/`transform`
-schemas. Databricks creates two UUID schemas in a configured Unity Catalog,
-qualifies logical SQL, and uses OAuth M2M. Construction makes no cloud request.
+dbt profiles and cleanup. The default DuckDB path uses independent files with
+`raw`/`transform` schemas. Its CLI starts an ephemeral Python HTTP source server
+for the entire rollout/replay and closes it on exit. No Docker or database
+credentials are required. Databricks is retained only as an optional adapter.
 
 `LocalIngestor` parses CSV and fetches HTTP JSON, coerces specified types,
-and replaces raw tables. `AirbyteIngestor` shares its receipt interface but
+and replaces raw tables. The optional `AirbyteIngestor` shares its receipt interface but
 uses source definitions, check/discovery, destination configuration, a
 connection and a terminal-successful asynchronous sync. Healthy services or
 successful connections do not prove successful ingestion.
@@ -111,6 +112,10 @@ Full grading/replay occurs only at submission. Immutable public assets and
 tokenizers are cached, services reused, outputs capped, and all exits clean
 owned namespace resources. New destinations reuse the same episode/RL loop.
 
-Offline mocks do not prove cloud sync or training. A scripted DuckDB pipeline
-does not prove a model-generated Databricks rollout. See [running.md](running.md)
-and [acceptance.md](acceptance.md) for commands and honest evidence boundaries.
+Offline mocks do not prove real model sampling or training. A scripted DuckDB
+pipeline does not prove a model-generated official-task rollout. The current
+route adapts the official Databricks task specification and reference data to
+DuckDB while retaining the pinned official comparator. Tinker remains remote
+and uses real API credentials. Whether this fulfills the grader's credentialed
+warehouse requirement remains an acceptance interpretation, not an observed
+result. See [running.md](running.md) and [acceptance.md](acceptance.md).

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pandas as pd
 import pytest
 import requests
-from databricks.sql.exc import RequestError, ServerOperationError
 
 from elt_bench_rl.airbyte import (
     AirbyteClient,
@@ -20,6 +20,47 @@ from elt_bench_rl.airbyte import (
 from elt_bench_rl.databricks import DatabricksAdapter, DatabricksConfig
 from elt_bench_rl.errors import InfrastructureError, PolicyError
 from elt_bench_rl.task import ColumnSpec, SourceSpec
+
+
+class DataError(Exception):
+    """Test-only DB-API exception: cloud extras are not required by mocks."""
+
+
+class ProgrammingError(Exception):
+    pass
+
+
+class ServerOperationError(Exception):
+    pass
+
+
+class RequestError(Exception):
+    pass
+
+
+@pytest.fixture(autouse=True)
+def stub_vendor_exceptions(monkeypatch):
+    """Exercise classification using an injected exception boundary, not SDK I/O.
+
+    All warehouse connections below come from connection_factory. This fixture
+    is restored after each test and keeps the complete mock suite runnable with
+    the default local dependencies, even when Databricks is entirely absent.
+    """
+    package = ModuleType("databricks")
+    package.__path__ = []
+    sql = ModuleType("databricks.sql")
+    sql.__path__ = []
+    exceptions = ModuleType("databricks.sql.exc")
+    for exception in (DataError, ProgrammingError, ServerOperationError, RequestError):
+        setattr(exceptions, exception.__name__, exception)
+    package.sql = sql
+    sql.exc = exceptions
+    for name, module in (
+        ("databricks", package),
+        ("databricks.sql", sql),
+        ("databricks.sql.exc", exceptions),
+    ):
+        monkeypatch.setitem(sys.modules, name, module)
 
 
 class Response:

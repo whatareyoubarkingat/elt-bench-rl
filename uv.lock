@@ -1139,24 +1139,28 @@ name = "elt-bench-rl"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "dbt-duckdb" },
+    { name = "duckdb" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pyarrow" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "sqlglot" },
+    { name = "tinker-cookbook" },
+]
+
+[package.optional-dependencies]
+cloud = [
     { name = "awscli" },
     { name = "databricks-sdk" },
     { name = "databricks-sql-connector" },
     { name = "dbt-databricks" },
-    { name = "dbt-duckdb" },
     { name = "dbt-snowflake" },
-    { name = "duckdb" },
     { name = "gdown" },
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "pyarrow" },
     { name = "pymongo" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "requests" },
     { name = "snowflake-connector-python" },
-    { name = "sqlglot" },
-    { name = "tinker-cookbook" },
 ]
 
 [package.dev-dependencies]
@@ -1169,25 +1173,26 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "awscli", specifier = ">=1.35,<2" },
-    { name = "databricks-sdk", specifier = ">=0.60,<1" },
-    { name = "databricks-sql-connector", specifier = ">=4,<5" },
-    { name = "dbt-databricks", specifier = ">=1.9,<2" },
+    { name = "awscli", marker = "extra == 'cloud'", specifier = ">=1.35,<2" },
+    { name = "databricks-sdk", marker = "extra == 'cloud'", specifier = ">=0.60,<1" },
+    { name = "databricks-sql-connector", marker = "extra == 'cloud'", specifier = ">=4,<5" },
+    { name = "dbt-databricks", marker = "extra == 'cloud'", specifier = ">=1.9,<2" },
     { name = "dbt-duckdb", specifier = ">=1.9,<2" },
-    { name = "dbt-snowflake", specifier = ">=1.9,<2" },
+    { name = "dbt-snowflake", marker = "extra == 'cloud'", specifier = ">=1.9,<2" },
     { name = "duckdb", specifier = ">=1.4,<2" },
-    { name = "gdown", specifier = ">=5,<6" },
+    { name = "gdown", marker = "extra == 'cloud'", specifier = ">=5,<6" },
     { name = "numpy", specifier = ">=1.26,<2" },
     { name = "pandas", specifier = ">=2.2,<3" },
     { name = "pyarrow", specifier = "==23.0.1" },
-    { name = "pymongo", specifier = ">=4,<5" },
+    { name = "pymongo", marker = "extra == 'cloud'", specifier = ">=4,<5" },
     { name = "python-dotenv", specifier = ">=1,<2" },
     { name = "pyyaml", specifier = ">=6,<7" },
     { name = "requests", specifier = ">=2.32,<3" },
-    { name = "snowflake-connector-python", specifier = ">=3,<5" },
+    { name = "snowflake-connector-python", marker = "extra == 'cloud'", specifier = ">=3,<5" },
     { name = "sqlglot", specifier = ">=28,<30" },
     { name = "tinker-cookbook", editable = "third_party/tinker-cookbook" },
 ]
+provides-extras = ["cloud"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -7,6 +7,7 @@ import asyncio
 import json
 import os
 import subprocess
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -97,7 +98,10 @@ def parser():
             "--destination", choices=["duckdb", "databricks"], default="duckdb"
         )
         sub.add_argument("--task", default="trains")
-        sub.add_argument("--source-api", default="http://127.0.0.1:5005")
+        sub.add_argument(
+            "--source-api",
+            help="Source URL; DuckDB starts its own local HTTP source by default",
+        )
         sub.add_argument("--output", type=Path)
         sub.add_argument(
             "--allow-paid",
@@ -120,6 +124,90 @@ def parser():
     return command
 
 
+def source_service(args, root):
+    """Keep the local HTTP source alive through rollouts and clean replay."""
+    if args.source_api:
+        return nullcontext(args.source_api)
+    if args.destination == "duckdb" and (args.command != "preflight" or args.online):
+        return serve_sources(root / "data" / args.task, task_id=args.task)
+    return nullcontext("http://127.0.0.1:5005")
+
+
+def run_command(args, root, output, source_api):
+    episode_config = {
+        "project_root": str(root),
+        "task_id": args.task,
+        "destination": args.destination,
+        "run_root": str(output),
+        "source_api": source_api,
+    }
+    if args.command == "replay":
+        episode = build_episode(**episode_config)
+        try:
+            return episode.replay(PipelineBundle.read(args.bundle))
+        finally:
+            episode.close()
+    if args.command == "preflight":
+        names = ["TINKER_API_KEY"]
+        if args.destination == "databricks":
+            names += [
+                "DATABRICKS_HOST",
+                "DATABRICKS_HTTP_PATH",
+                "DATABRICKS_CATALOG",
+                "DATABRICKS_CLIENT_ID",
+                "DATABRICKS_CLIENT_SECRET",
+                "AIRBYTE_CLIENT_ID",
+                "AIRBYTE_CLIENT_SECRET",
+                "AIRBYTE_WORKSPACE_ID",
+            ]
+        result = {
+            "credential_presence": {name: bool(os.getenv(name)) for name in names},
+            "cloud_calls": False,
+            "database": args.destination,
+        }
+        if args.online:
+            env = build_episode(**episode_config)
+            try:
+                result["online"] = {"empty_schema": env.adapter.list_tables() == []}
+                result["cloud_calls"] = args.destination == "databricks"
+            finally:
+                env.close()
+        return result
+
+    import yaml
+
+    from .training import TrainingConfig, rollout, train
+
+    values = yaml.safe_load(args.config.read_text()) if args.config else {}
+    values = values or {}
+    values.update(
+        {
+            "episode_config": episode_config,
+            "log_path": str(output),
+            "tokenizer_path": str(
+                args.tokenizer or root / "data/tokenizers/Qwen3.5-4B"
+            ),
+        }
+    )
+    if args.command == "rollout" and "group_size" not in values:
+        values["group_size"] = 1
+    recipe = TrainingConfig(**values)
+    fn = train if args.command == "train" else rollout
+    result = asyncio.run(fn(recipe, allow_paid=args.allow_paid)).as_dict()
+    (output / "manifest.json").write_text(
+        json.dumps(
+            {
+                "source_revision": _revision(root),
+                "recipe": values,
+                "result": result,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    return result
+
+
 def main():
     args = parser().parse_args()
     root = args.project_root.resolve()
@@ -139,77 +227,8 @@ def main():
             raise SystemExit(
                 "Cloud warehouse execution requires --allow-paid after choosing a budget"
             )
-        episode_config = {
-            "project_root": str(root),
-            "task_id": args.task,
-            "destination": args.destination,
-            "run_root": str(output),
-            "source_api": args.source_api,
-        }
-        if args.command == "replay":
-            episode = build_episode(**episode_config)
-            try:
-                result = episode.replay(PipelineBundle.read(args.bundle))
-            finally:
-                episode.close()
-        elif args.command == "preflight":
-            names = (
-                "TINKER_API_KEY",
-                "DATABRICKS_HOST",
-                "DATABRICKS_HTTP_PATH",
-                "DATABRICKS_CATALOG",
-                "DATABRICKS_CLIENT_ID",
-                "DATABRICKS_CLIENT_SECRET",
-                "AIRBYTE_CLIENT_ID",
-                "AIRBYTE_CLIENT_SECRET",
-                "AIRBYTE_WORKSPACE_ID",
-            )
-            result = {
-                "credential_presence": {name: bool(os.getenv(name)) for name in names},
-                "cloud_calls": False,
-                "database": args.destination,
-            }
-            if args.online:
-                if args.destination == "databricks" and not args.allow_paid:
-                    raise SystemExit("Online warehouse preflight requires --allow-paid")
-                env = build_episode(**episode_config)
-                try:
-                    result["online"] = {"empty_schema": env.adapter.list_tables() == []}
-                    result["cloud_calls"] = args.destination == "databricks"
-                finally:
-                    env.close()
-        else:
-            import yaml
-
-            from .training import TrainingConfig, rollout, train
-
-            values = yaml.safe_load(args.config.read_text()) if args.config else {}
-            values = values or {}
-            values.update(
-                {
-                    "episode_config": episode_config,
-                    "log_path": str(output),
-                    "tokenizer_path": str(
-                        args.tokenizer or root / "data/tokenizers/Qwen3.5-4B"
-                    ),
-                }
-            )
-            if args.command == "rollout" and "group_size" not in values:
-                values["group_size"] = 1
-            recipe = TrainingConfig(**values)
-            fn = train if args.command == "train" else rollout
-            result = asyncio.run(fn(recipe, allow_paid=args.allow_paid)).as_dict()
-            (output / "manifest.json").write_text(
-                json.dumps(
-                    {
-                        "source_revision": _revision(root),
-                        "recipe": values,
-                        "result": result,
-                    },
-                    indent=2,
-                )
-                + "\n"
-            )
+        with source_service(args, root) as source_api:
+            result = run_command(args, root, output, source_api)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     if result.get("passed") is False:
         raise SystemExit(1)

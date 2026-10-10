@@ -13,13 +13,33 @@ uv run --locked elt-rl local-smoke --output runs/local-smoke
 uv run --locked elt-rl replay --bundle runs/local-smoke/episode_<id>/pipeline.json --output runs/replay
 ```
 
-`local-smoke` starts an ephemeral HTTP source server. Other commands use
-`--source-api` (default `http://127.0.0.1:5005`); start the source service
-before standalone replay. Each episode retains tool trace, dbt feedback,
+All DuckDB execution commands start and close an ephemeral Python HTTP source
+server by default. No separate service or Docker deployment is needed. Set
+`--source-api` only to use an existing server. Each episode retains tool trace, dbt feedback,
 frozen pipeline/digest and original/replay grades. Warehouse files are removed.
 `examples/trains.sql` is human-written and never injected into model prompts.
 
-## Databricks and Airbyte
+## Model-generated official-task rollout on DuckDB
+
+Set `TINKER_API_KEY` in `.env` and choose a Tinker spending limit first:
+
+```bash
+uv run --locked python scripts/fetch_tokenizer.py
+uv run --locked elt-rl preflight --destination duckdb --online
+uv run --locked elt-rl rollout --destination duckdb --allow-paid --output runs/official-local
+```
+
+Sampling uses real Tinker credentials; extraction/loading, dbt execution and
+clean replay run locally. Preserve model tool trajectories, load receipts,
+original/replay grades and the bundle. The official `trains` inputs and target
+reference are unchanged, but DuckDB is an adapted destination. The assignment
+does not mandate Databricks or Airbyte; acceptance of a Tinker-credentialed
+local warehouse rollout should be confirmed with the grader.
+
+## Optional Databricks and Airbyte extension
+
+These services are not needed for the default route. Install optional drivers
+with `uv sync --locked --extra cloud` before using this extension.
 
 Use a SQL Warehouse and Unity Catalog. The OAuth M2M principal needs catalog
 use, episode schema creation/use, tables and the selected Airbyte connector's
@@ -42,7 +62,7 @@ uv run --locked python scripts/fetch_tokenizer.py
 uv run --locked elt-rl rollout --destination databricks --allow-paid --output runs/official
 ```
 
-Credential presence is not authenticated access. Official acceptance requires
+Credential presence is not authenticated access. This optional cloud validation requires
 a model-generated trajectory, actual successful Airbyte jobs for both sources,
 Databricks execution, fresh two-stage metrics, a bundle and clean replay.
 Health/check/discovery alone is insufficient. Preserve job IDs in trusted
@@ -50,7 +70,7 @@ receipts, not bundles. Do not publish secrets in connector manifests.
 
 ## Real one-step RL
 
-Choose a spending limit, set `TINKER_API_KEY`, start the source service, then:
+Choose a spending limit and set `TINKER_API_KEY`, then:
 
 ```bash
 uv run --locked elt-rl train --destination duckdb \

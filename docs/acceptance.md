@@ -1,9 +1,10 @@
 # Acceptance and evidence
 
-The implementation is runnable locally. Two assignment acceptance gates still
-require authorized cloud execution: an official model-generated Databricks
-rollout and a real Tinker parameter update. No paid calls were made during local
-development.
+The default implementation runs locally with DuckDB, a Python CSV/HTTP loader
+and dbt-duckdb. Two acceptance gates still require authorized real Tinker calls:
+a model-generated official-task rollout and a real parameter update. No paid
+calls were made during local development. Databricks and Airbyte are optional
+extensions and no longer part of the default development route.
 
 | Gate | Observed result |
 | --- | --- |
@@ -13,7 +14,7 @@ development.
 | Correct versus incorrect execution rewards | 1.0 versus 0.6285714285714286 |
 | Official strict metrics on the scripted correct pipeline | Stage 1 and Stage 2 passed in the original execution and replay |
 | Cookbook tools, trajectory masks, advantages and optimization wiring | Offline integration and injected-client tests passed |
-| Official model-generated Databricks rollout and real Airbyte synchronization | Not run |
+| Official-task model-generated rollout on DuckDB with real Tinker credentials | Not run; grader acceptance of the adapted destination unconfirmed |
 | Real Tinker optimizer response, checkpoint and observed parameter change | Not run |
 
 The local demonstration uses pinned official `trains` source bytes and target
@@ -49,7 +50,10 @@ SQL/Jinja capability restrictions, cleanup failures, cloud adapter behavior,
 constant-reward groups and checkpoint verification. Cloud and optimizer mocks
 are identified as such.
 
-## Airbyte local prerequisite
+## Historical optional Airbyte checks
+
+The following records concern the previous cloud route; they are not local
+DuckDB prerequisites. Existing services and volumes have been preserved.
 
 The local Airbyte 2.4.0 database lacked the declarative connector image-version
 seed required by CDK 6.33.4. The narrowly scoped
@@ -68,15 +72,22 @@ digest matched. One duplicate unpublished draft left by our failed registration
 was removed; the unique published definition remains as an immutable cache.
 The final source listing contained no temporary probe sources.
 
-## Remaining cloud gates
+## Remaining model and training gates
 
-Follow [running.md](running.md) after configuring Databricks OAuth M2M and
-agreeing a spending limit. Keep generated tool trajectories, successful Airbyte
-job receipts, original/replay grades and the submitted pipeline for the official
-rollout. Keep nonzero advantages, effective assistant tokens, awaited optimizer
+Follow the default DuckDB commands in [running.md](running.md) after agreeing
+a Tinker spending limit. Keep generated tool trajectories, trusted local load
+receipts, original/replay grades and the submitted pipeline. Keep nonzero
+advantages, effective assistant tokens, awaited optimizer
 responses, reloaded state checkpoint and changed action-token logprobs for RL.
 All-equal rewards or an unchanged verification probe fail effective-training
 acceptance.
+
+The assignment explicitly requires Tinker and at least one warehouse, but does
+not name Databricks or Airbyte as requirements. This implementation adapts the
+official Databricks task variant to DuckDB using unchanged source/reference
+bytes. Tinker API credentials are real; the warehouse is credential-free.
+Do not claim the credentialed-rollout gate passed without an actual successful
+model run and confirmation of the grader's intended warehouse requirement.
 
 The concise native [Google Doc design](https://docs.google.com/document/d/1SWoXsokaq7h7AoHn0ud66ymrli8wtcF7yN_bWqMuZUc)
 records the environment, reward, replay, safety, efficiency and current results.

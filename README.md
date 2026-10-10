@@ -2,8 +2,10 @@
 
 Stateful execution-graded ELT tasks with real CSV/HTTP extraction, dbt SQL,
 clean pipeline replay, and a [Tinker Cookbook](https://github.com/thinking-machines-lab/tinker-cookbook)
-RL recipe. Local execution uses DuckDB; the credentialed path uses Databricks
-and Airbyte. Upstream revisions and Python dependencies are pinned.
+RL recipe. The default path uses local DuckDB, a Python CSV/HTTP loader and
+dbt-duckdb. Tinker provides remote model sampling and training. No Databricks,
+Airbyte, Docker, cloud warehouse account or local GPU is needed for this path.
+Upstream revisions and Python dependencies are pinned.
 
 ## Run without credentials
 
@@ -30,7 +32,7 @@ credentialed official rollout.
 | Credential-free integration: extraction, dbt, feedback and replay | Passed locally |
 | Different execution rewards for correct and incorrect pipelines | Passed: 1.0 vs 0.628571 |
 | Cookbook environment, reward and optimizer integration | Offline tests passed; injected clients are labeled |
-| Model-generated official Databricks rollout with actual Airbyte sync | Not run: needs Databricks credentials and a cloud budget |
+| Model-generated rollout on the official `trains` task adapted to DuckDB | Not run: needs authorized real Tinker sampling |
 | Real Tinker optimization with nonzero advantages and model change | Not run: paid calls deliberately deferred |
 
 See [design](docs/design.md), [run commands](docs/running.md),
@@ -53,15 +55,14 @@ target reward requires every source to load correctly. Key-aligned cell scores
 penalize missing/extra rows/columns and duplicate keys. Fresh official Stage-1/2
 metrics are reported separately from the stronger reward rules.
 
-## Cloud commands (after choosing a budget)
+## Model rollout and training (after choosing a Tinker budget)
 
 ```bash
 cp -n configs/.env.example .env
-# Fill Databricks OAuth M2M, Airbyte and Tinker fields locally.
-bash scripts/start_sources.sh
+# Fill only TINKER_API_KEY locally.
 uv run --locked python scripts/fetch_tokenizer.py
-uv run --locked elt-rl preflight --destination databricks --online --allow-paid
-uv run --locked elt-rl rollout --destination databricks --allow-paid --output runs/official
+uv run --locked elt-rl preflight --destination duckdb --online
+uv run --locked elt-rl rollout --destination duckdb --allow-paid --output runs/official-local
 uv run --locked elt-rl train --destination duckdb --config configs/train.yaml --allow-paid --output runs/rl-one-step
 ```
 
@@ -72,6 +73,14 @@ serial execution, one update. Constant groups are resampled at most twice;
 zero effective advantage means no update. Fixed action-token logprobs must
 change after optimization before success is reported. No local GPU or model
 weights are required.
+
+DuckDB commands start and stop their own local HTTP source automatically.
+The assignment explicitly requires Tinker, but does not mandate Databricks or
+Airbyte. DuckDB uses the pinned official task inputs and reference data with
+an adapted SQL dialect; it is not an upstream-supported warehouse destination.
+The interpretation of the assignment's credentialed warehouse rollout should
+be confirmed with the grader before claiming that gate passed. Existing cloud
+adapters remain optional extensions (`uv sync --locked --extra cloud`).
 
 ## Layout
 
