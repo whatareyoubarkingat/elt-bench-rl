@@ -6,17 +6,28 @@ tests; they must never be presented as evidence of a credentialed Tinker run.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import math
-from collections.abc import Callable, Mapping
+import os
+import tempfile
+import threading
+import time
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict, dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, TypeVar
 
 import numpy as np
 import tinker
 from tinker_cookbook.checkpoint_utils import save_checkpoint_async
-from tinker_cookbook.completers import TinkerTokenCompleter, TokenCompleter
+from tinker_cookbook.completers import (
+    StopCondition,
+    TinkerTokenCompleter,
+    TokenCompleter,
+    TokensWithLogprobs,
+)
 from tinker_cookbook.model_info import get_recommended_renderer_name
 from tinker_cookbook.renderers import Renderer, get_renderer
 from tinker_cookbook.rl.data_processing import (
@@ -34,6 +45,29 @@ from .cookbook_env import (
     EpisodeFactory,
 )
 
+T = TypeVar("T")
+
+
+class BudgetReservation(Protocol):
+    """Caller-owned reservation; uncertain remote outcomes retain their cost."""
+
+    def complete(self, input_tokens: int, output_tokens: int) -> None: ...
+
+    def uncertain(self, error_type: str) -> None: ...
+
+
+class TokenBudget(Protocol):
+    """One persistent spending ledger shared across rollout, training and retries."""
+
+    def reserve(
+        self,
+        operation: str,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        metadata: dict[str, Any],
+    ) -> BudgetReservation: ...
+
 
 class PaidAccessRequired(RuntimeError):
     """A real Tinker client would be created without explicit authorization."""
@@ -45,6 +79,10 @@ class NoLearningSignalError(RuntimeError):
 
 class NoWeightUpdateError(RuntimeError):
     """The requested step lacks observable pre/post model-change evidence."""
+
+
+class RemoteCallTimeout(TimeoutError):
+    """A bounded wait expired; remote execution may still have consumed tokens."""
 
 
 @dataclass(frozen=True)
@@ -68,6 +106,7 @@ class TrainingConfig:
     update_tolerance: float = 1e-8
     load_checkpoint_path: str | None = None
     sampler_checkpoint_path: str | None = None
+    remote_timeout_seconds: float = 300.0
 
     def validate(self, *, training: bool) -> None:
         for name in (
@@ -95,6 +134,11 @@ class TrainingConfig:
             raise ValueError("max_constant_group_retries must be between 0 and 2")
         if not math.isfinite(self.update_tolerance) or self.update_tolerance < 0:
             raise ValueError("update_tolerance must be finite and nonnegative")
+        if (
+            not math.isfinite(self.remote_timeout_seconds)
+            or self.remote_timeout_seconds <= 0
+        ):
+            raise ValueError("remote_timeout_seconds must be finite and positive")
         if self.load_checkpoint_path is not None and (
             not isinstance(self.load_checkpoint_path, str)
             or not self.load_checkpoint_path.startswith("tinker://")
@@ -160,9 +204,12 @@ def load_renderer(config: TrainingConfig) -> Renderer:
 
 
 def _group_builder(
-    config: TrainingConfig, renderer: Renderer, episode_factory: EpisodeFactory | None
+    config: TrainingConfig,
+    renderer: Renderer,
+    episode_factory: EpisodeFactory | None,
+    progress: DurableProgress | None = None,
 ) -> ELTEnvGroupBuilder:
-    return ELTEnvGroupBuilder(
+    builder = ELTEnvGroupBuilder(
         dict(config.episode_config),
         renderer,
         group_size=config.group_size,
@@ -173,17 +220,344 @@ def _group_builder(
         max_tool_output_tokens=config.max_tool_output_tokens,
         episode_factory=episode_factory,
     )
+    builder.progress = progress
+    return builder
 
 
 def _write_json(path: Path, value: Any) -> None:
-    path.write_text(
-        json.dumps(value, ensure_ascii=False, allow_nan=False, indent=2) + "\n"
-    )
+    body = json.dumps(value, ensure_ascii=False, allow_nan=False, indent=2) + "\n"
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", dir=path.parent, prefix=".evidence-", delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(body)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _append_json(path: Path, value: Any) -> None:
     with path.open("a") as handle:
         handle.write(json.dumps(value, ensure_ascii=False, allow_nan=False) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+class DurableProgress:
+    """Flush public turn/phase evidence immediately, even if a later call fails."""
+
+    def __init__(self, log_path: Path, *, injected_runtime: bool):
+        self.path = log_path / "progress.jsonl"
+        self.context: dict[str, Any] = {"injected_runtime": injected_runtime}
+        self.last_phase = "initializing"
+        self._lock = threading.Lock()
+        self._sequence = 0
+
+    def __call__(self, event: dict[str, Any]) -> None:
+        with self._lock:
+            self._sequence += 1
+            if "phase" in event:
+                self.last_phase = event["phase"]
+            _append_json(
+                self.path,
+                {
+                    **self.context,
+                    **event,
+                    "sequence": self._sequence,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+
+
+def _reserve(
+    budget: TokenBudget | None,
+    operation: str,
+    input_tokens: int,
+    output_tokens: int,
+    progress: DurableProgress,
+) -> BudgetReservation | None:
+    if budget is None:
+        return None
+    try:
+        return budget.reserve(
+            operation,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            metadata=dict(progress.context),
+        )
+    except Exception as error:
+        progress({"event": "budget_denied", "error_type": type(error).__name__})
+        raise
+
+
+async def _remote(
+    phase: str,
+    call: Callable[[], Awaitable[T]],
+    config: TrainingConfig,
+    progress: DurableProgress,
+    *,
+    reservation: BudgetReservation | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+) -> T:
+    progress({"event": "remote_start", "phase": phase})
+    started = time.monotonic()
+    try:
+        async with asyncio.timeout(config.remote_timeout_seconds):
+            result = await call()
+    except BaseException as error:
+        if reservation is not None:
+            reservation.uncertain(type(error).__name__)
+        progress(
+            {
+                "event": "remote_error",
+                "phase": phase,
+                "error_type": type(error).__name__,
+                "remote_outcome": "uncertain",
+                "elapsed_seconds": time.monotonic() - started,
+            }
+        )
+        if isinstance(error, TimeoutError):
+            raise RemoteCallTimeout(
+                f"Remote phase exceeded its wait limit: {phase}"
+            ) from None
+        raise
+    if reservation is not None:
+        reservation.complete(input_tokens, output_tokens)
+    progress(
+        {
+            "event": "remote_end",
+            "phase": phase,
+            "elapsed_seconds": time.monotonic() - started,
+        }
+    )
+    return result
+
+
+class ObservedCompleter(TokenCompleter):
+    """Reserve a capped call and flush its exact sampled action before tools run."""
+
+    def __init__(self, inner, config, renderer, progress, budget=None):
+        self.inner, self.config, self.renderer = inner, config, renderer
+        self.progress, self.budget = progress, budget
+        self.calls = 0
+
+    async def __call__(
+        self, model_input: tinker.ModelInput, stop: StopCondition, *, max_tokens=None
+    ) -> TokensWithLogprobs:
+        cap = min(
+            self.config.max_turn_tokens,
+            max_tokens if max_tokens is not None else self.config.max_turn_tokens,
+            self.config.max_context_tokens - model_input.length,
+        )
+        if cap <= 0:
+            raise ValueError("Sampling prompt leaves no room in the context budget")
+        self.calls += 1
+        fields = {
+            "phase": "sample",
+            "call": self.calls,
+            "prompt_tokens": model_input.length,
+            "output_cap": cap,
+        }
+        reservation = _reserve(
+            self.budget, "sample", model_input.length, cap, self.progress
+        )
+        self.progress({"event": "sample_start", **fields})
+        started = time.monotonic()
+        try:
+            async with asyncio.timeout(self.config.remote_timeout_seconds):
+                action = await self.inner(model_input, stop, max_tokens=cap)
+        except BaseException as error:
+            if reservation is not None:
+                reservation.uncertain(type(error).__name__)
+            self.progress(
+                {
+                    "event": "sample_error",
+                    **fields,
+                    "error_type": type(error).__name__,
+                    "remote_outcome": "uncertain",
+                    "elapsed_seconds": time.monotonic() - started,
+                }
+            )
+            if isinstance(error, TimeoutError):
+                raise RemoteCallTimeout(
+                    "Sampling exceeded its remote wait limit"
+                ) from None
+            raise
+        if reservation is not None:
+            reservation.complete(model_input.length, len(action.tokens))
+        logprobs = action.logprobs
+        if (
+            len(action.tokens) > cap
+            or len(logprobs) != len(action.tokens)
+            or not all(math.isfinite(value) for value in logprobs)
+        ):
+            raise ValueError("Sample violated its token/logprob contract")
+        self.progress(
+            {
+                "event": "sample_end",
+                **fields,
+                "action_tokens": action.tokens,
+                "action": self.renderer.tokenizer.decode(action.tokens),
+                "sampled_logprobs": logprobs,
+                "stop_reason": action.stop_reason,
+                "elapsed_seconds": time.monotonic() - started,
+            }
+        )
+        return action
+
+
+def _sampler_retry(config: TrainingConfig):
+    from tinker.lib.retry_handler import RetryConfig
+
+    return RetryConfig(
+        enable_retry_logic=False, progress_timeout=config.remote_timeout_seconds
+    )
+
+
+async def _close_service(service, status, config, progress):
+    if service is None:
+        return
+
+    async def close():
+        # close() can wait for the lazy holder's lock after a creation timeout.
+        # Keep that synchronous section off the progress event loop as well.
+        future = await asyncio.to_thread(service.close, status)
+        await future
+
+    try:
+        await _remote(
+            "session_close",
+            close,
+            replace(
+                config, remote_timeout_seconds=min(config.remote_timeout_seconds, 30)
+            ),
+            progress,
+        )
+    except Exception as error:
+        # Preserve the original outcome; this failure is also durable evidence.
+        progress({"event": "session_close_failed", "error_type": type(error).__name__})
+        if status == "success":
+            _failure(progress.path.parent, progress, error)
+            raise
+
+
+def _failure(log_path, progress, error):
+    _write_json(
+        log_path / "failure.json",
+        {
+            "status": "failed",
+            "error_type": type(error).__name__,
+            "last_phase": progress.last_phase,
+            "injected_runtime": progress.context["injected_runtime"],
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
+
+
+async def _create_sampler(owner, config, progress, *, model_path=None):
+    kwargs = {"retry_config": _sampler_retry(config)}
+    if model_path is not None:
+        kwargs["model_path"] = model_path
+    else:
+        kwargs["base_model"] = config.model_name
+    sync = getattr(owner, "create_sampling_client", None)
+    # A new ServiceClient lazily initializes its holder synchronously. Keep
+    # that public sync operation off the monitor's event loop.
+    call = (
+        (lambda: asyncio.to_thread(sync, **kwargs))
+        if callable(sync)
+        else (lambda: owner.create_sampling_client_async(**kwargs))
+    )
+    return await _remote("sampler_create", call, config, progress)
+
+
+class _ObservedFuture:
+    def __init__(self, inner, phase, config, progress, reservation=None, tokens=0):
+        self.inner, self.phase, self.config, self.progress = (
+            inner,
+            phase,
+            config,
+            progress,
+        )
+        self.reservation, self.tokens = reservation, tokens
+        self.settled = False
+
+    async def result_async(self):
+        try:
+            return await _remote(
+                self.phase,
+                self.inner.result_async,
+                self.config,
+                self.progress,
+                reservation=self.reservation,
+                input_tokens=self.tokens,
+            )
+        finally:
+            self.settled = True
+
+    def uncertain(self, error_type):
+        if not self.settled and self.reservation is not None:
+            self.reservation.uncertain(error_type)
+            self.settled = True
+
+
+class _ObservedTrainingClient:
+    """Retain Cookbook pipelining while bounding submissions and future waits."""
+
+    def __init__(self, inner, config, progress, budget):
+        self.inner, self.config, self.progress, self.budget = (
+            inner,
+            config,
+            progress,
+            budget,
+        )
+        self.pending: list[_ObservedFuture] = []
+
+    async def forward_backward_async(self, data, *, loss_fn, loss_fn_config=None):
+        tokens = sum(datum.model_input.length for datum in data)
+        reservation = _reserve(self.budget, "train", tokens, 0, self.progress)
+        try:
+            future = await _remote(
+                "forward_backward_submit",
+                lambda: self.inner.forward_backward_async(
+                    data, loss_fn=loss_fn, loss_fn_config=loss_fn_config
+                ),
+                self.config,
+                self.progress,
+            )
+        except BaseException as error:
+            if reservation is not None:
+                reservation.uncertain(type(error).__name__)
+            raise
+        observed = _ObservedFuture(
+            future,
+            "forward_backward_wait",
+            self.config,
+            self.progress,
+            reservation,
+            tokens,
+        )
+        self.pending.append(observed)
+        return observed
+
+    async def optim_step_async(self, params):
+        future = await _remote(
+            "optimizer_submit",
+            lambda: self.inner.optim_step_async(params),
+            self.config,
+            self.progress,
+        )
+        return _ObservedFuture(future, "optimizer_wait", self.config, self.progress)
+
+    def uncertain(self, error_type):
+        for future in self.pending:
+            future.uncertain(error_type)
 
 
 def _trace(
@@ -256,9 +630,23 @@ def _probe(data: list[tinker.Datum]) -> tuple[tinker.ModelInput, np.ndarray]:
 
 
 async def _probe_logprobs(
-    sampling_client: tinker.SamplingClient, prompt: tinker.ModelInput, mask: np.ndarray
+    sampling_client: tinker.SamplingClient,
+    prompt: tinker.ModelInput,
+    mask: np.ndarray,
+    config: TrainingConfig,
+    progress: DurableProgress,
+    budget: TokenBudget | None,
 ) -> np.ndarray:
-    values = await sampling_client.compute_logprobs_async(prompt)
+    reservation = _reserve(budget, "probe", prompt.length, 1, progress)
+    values = await _remote(
+        "logprob_probe",
+        lambda: sampling_client.compute_logprobs_async(prompt),
+        config,
+        progress,
+        reservation=reservation,
+        input_tokens=prompt.length,
+        output_tokens=1,
+    )
     if len(values) != len(mask) + 1:
         raise NoWeightUpdateError(
             "Probe returned an unexpected number of token logprobs"
@@ -290,6 +678,7 @@ async def rollout(
     completer: TokenCompleter | None = None,
     renderer: Renderer | None = None,
     episode_factory: EpisodeFactory | None = None,
+    budget: TokenBudget | None = None,
 ) -> RolloutResult:
     config = _config(config)
     config.validate(training=False)
@@ -297,44 +686,55 @@ async def rollout(
     if completer is None and not allow_paid:
         raise PaidAccessRequired("Real Tinker rollout requires allow_paid=True")
     renderer = renderer or load_renderer(config)
-    if completer is None:
-        service = tinker.ServiceClient()
-        if config.sampler_checkpoint_path is not None:
-            sampling_client = await service.create_sampling_client_async(
-                model_path=config.sampler_checkpoint_path
-            )
-        else:
-            sampling_client = await service.create_sampling_client_async(
-                base_model=config.model_name
-            )
-        completer = TinkerTokenCompleter(
-            sampling_client,
-            max_tokens=config.max_turn_tokens,
-            temperature=config.temperature,
-            context_window=config.max_context_tokens,
-        )
     log_path = Path(config.log_path)
     log_path.mkdir(parents=True, exist_ok=True)
-    group = await do_group_rollout(
-        _group_builder(config, renderer, episode_factory),
-        completer,
-        strategy=BoundedEpisodeStrategy(config.serial_episodes),
-    )
-    trace_path = log_path / "rollout.json"
-    _write_json(trace_path, _trace(group, renderer, step=0, attempt=0))
-    metrics = [
-        dict(trajectory.transitions[-1].metrics) if trajectory.transitions else {}
-        for trajectory in group.trajectories_G
-    ]
-    result = RolloutResult(
-        group.get_total_rewards(),
-        [trajectory.stop_reason for trajectory in group.trajectories_G],
-        metrics,
-        str(trace_path),
-        injected,
-    )
-    _write_json(log_path / "rollout_result.json", result.as_dict())
-    return result
+    progress = DurableProgress(log_path, injected_runtime=injected)
+    progress.context.update(step=0, attempt=0)
+    service = None
+    status = "errored"
+    try:
+        progress({"event": "rollout_start"})
+        if completer is None:
+            service = tinker.ServiceClient()
+            sampling_client = await _create_sampler(
+                service, config, progress, model_path=config.sampler_checkpoint_path
+            )
+            completer = TinkerTokenCompleter(
+                sampling_client,
+                max_tokens=config.max_turn_tokens,
+                temperature=config.temperature,
+                context_window=config.max_context_tokens,
+            )
+        observed = ObservedCompleter(completer, config, renderer, progress, budget)
+        group = await do_group_rollout(
+            _group_builder(config, renderer, episode_factory, progress),
+            observed,
+            strategy=BoundedEpisodeStrategy(config.serial_episodes),
+        )
+        trace_path = log_path / "rollout.json"
+        _write_json(trace_path, _trace(group, renderer, step=0, attempt=0))
+        metrics = [
+            dict(trajectory.transitions[-1].metrics) if trajectory.transitions else {}
+            for trajectory in group.trajectories_G
+        ]
+        result = RolloutResult(
+            group.get_total_rewards(),
+            [trajectory.stop_reason for trajectory in group.trajectories_G],
+            metrics,
+            str(trace_path),
+            injected,
+        )
+        _write_json(log_path / "rollout_result.json", result.as_dict())
+        progress({"event": "rollout_end", "rewards": result.rewards})
+        status = "success"
+        return result
+    except BaseException as error:
+        if isinstance(error, asyncio.CancelledError):
+            status = "interrupted"
+        _failure(log_path, progress, error)
+        raise
+    finally:
+        await _close_service(service, status, config, progress)
 
 
 async def train(
@@ -345,6 +745,7 @@ async def train(
     renderer: Renderer | None = None,
     episode_factory: EpisodeFactory | None = None,
     completer_factory: Callable[[tinker.SamplingClient], TokenCompleter] | None = None,
+    budget: TokenBudget | None = None,
 ) -> TrainingResult:
     config = _config(config)
     config.validate(training=True)
@@ -352,6 +753,49 @@ async def train(
     if training_client is None and not allow_paid:
         raise PaidAccessRequired("Real Tinker optimization requires allow_paid=True")
     renderer = renderer or load_renderer(config)
+    log_path = Path(config.log_path)
+    log_path.mkdir(parents=True, exist_ok=True)
+    progress = DurableProgress(log_path, injected_runtime=injected)
+    service = None
+    status = "errored"
+    try:
+        progress({"event": "training_start"})
+        if training_client is None:
+            service = tinker.ServiceClient()
+        result = await _train_impl(
+            config,
+            training_client,
+            renderer,
+            episode_factory,
+            completer_factory,
+            budget,
+            progress,
+            service,
+            injected,
+        )
+        progress({"event": "training_end", "effective_update": result.effective_update})
+        status = "success"
+        return result
+    except BaseException as error:
+        if isinstance(error, asyncio.CancelledError):
+            status = "interrupted"
+        _failure(log_path, progress, error)
+        raise
+    finally:
+        await _close_service(service, status, config, progress)
+
+
+async def _train_impl(
+    config,
+    training_client,
+    renderer,
+    episode_factory,
+    completer_factory,
+    budget,
+    progress,
+    service,
+    injected,
+):
     dataset = ELTDatasetBuilder(
         episode_configs=[dict(config.episode_config)],
         model_name=config.model_name,
@@ -365,22 +809,43 @@ async def train(
         max_tool_output_tokens=config.max_tool_output_tokens,
     ).build_with_renderer(renderer)
     if training_client is None:
-        service = tinker.ServiceClient()
         if config.load_checkpoint_path is not None:
-            training_client = (
-                await service.create_training_client_from_state_with_optimizer_async(
-                    config.load_checkpoint_path, base_model=config.model_name
+            sync = getattr(
+                service, "create_training_client_from_state_with_optimizer", None
+            )
+            kwargs = {"base_model": config.model_name}
+            call = (
+                (lambda: asyncio.to_thread(sync, config.load_checkpoint_path, **kwargs))
+                if callable(sync)
+                else (
+                    lambda: (
+                        service.create_training_client_from_state_with_optimizer_async(
+                            config.load_checkpoint_path, **kwargs
+                        )
+                    )
                 )
             )
         else:
-            training_client = await service.create_lora_training_client_async(
-                base_model=config.model_name,
-                rank=config.lora_rank,
+            sync = getattr(service, "create_lora_training_client", None)
+            kwargs = {"base_model": config.model_name, "rank": config.lora_rank}
+            call = (
+                (lambda: asyncio.to_thread(sync, **kwargs))
+                if callable(sync)
+                else (lambda: service.create_lora_training_client_async(**kwargs))
             )
+        training_client = await _remote(
+            "training_client_create", call, config, progress
+        )
     elif config.load_checkpoint_path is not None:
-        await _load_state_checkpoint(training_client, config.load_checkpoint_path)
+        await _remote(
+            "state_resume",
+            lambda: _load_state_checkpoint(
+                training_client, config.load_checkpoint_path
+            ),
+            config,
+            progress,
+        )
     log_path = Path(config.log_path)
-    log_path.mkdir(parents=True, exist_ok=True)
     # Avoid serializing episode_config, which may contain private endpoint data.
     _write_json(
         log_path / "training_config.json",
@@ -393,15 +858,21 @@ async def train(
             "injected_runtime": injected,
         },
     )
-    paths = await save_checkpoint_async(
-        training_client,
-        "initial",
-        str(log_path),
-        {"step": 0, "injected_runtime": injected},
-        kind="both",
+    paths = await _remote(
+        "checkpoint_initial",
+        lambda: save_checkpoint_async(
+            training_client,
+            "initial",
+            str(log_path),
+            {"step": 0, "injected_runtime": injected},
+            kind="both",
+        ),
+        config,
+        progress,
     )
-    sampling_client = await training_client.create_sampling_client_async(
-        paths["sampler_path"]
+    progress({"event": "checkpoint_saved", "checkpoint": "initial", **paths})
+    sampling_client = await _create_sampler(
+        training_client, config, progress, model_path=paths["sampler_path"]
     )
     steps: list[dict[str, Any]] = []
     evidence_path = log_path / "training_result.json"
@@ -409,6 +880,7 @@ async def train(
         original_builder = dataset.get_batch(step)[0]
         assert isinstance(original_builder, ELTEnvGroupBuilder)
         original_builder.episode_factory = episode_factory
+        original_builder.progress = progress
         if completer_factory is not None:
             completer = completer_factory(sampling_client)
         else:
@@ -418,10 +890,13 @@ async def train(
                 temperature=config.temperature,
                 context_window=config.max_context_tokens,
             )
+        completer = ObservedCompleter(completer, config, renderer, progress, budget)
         data: list[tinker.Datum] = []
         stats: dict[str, float] = {}
         group: TrajectoryGroup | None = None
         for attempt in range(config.max_constant_group_retries + 1):
+            progress.context.update(step=step, attempt=attempt)
+            progress({"event": "group_start", "group_size": config.group_size})
             group = await do_group_rollout(
                 original_builder if attempt == 0 else replace(original_builder),
                 completer,
@@ -437,6 +912,13 @@ async def train(
             advantages = compute_advantages([group])
             data, _metadata = assemble_training_data([group], advantages)
             stats = _effective_data_stats(data)
+            stats.update(
+                training_input_tokens=float(
+                    sum(datum.model_input.length for datum in data)
+                ),
+                training_datums=float(len(data)),
+            )
+            progress({"event": "group_end", "rewards": rewards, **stats})
             _append_json(
                 log_path / "metrics.jsonl",
                 {
@@ -465,40 +947,77 @@ async def train(
                 "no forward_backward or optim_step was submitted for this step"
             )
         probe_prompt, probe_mask = _probe(data)
-        before = await _probe_logprobs(sampling_client, probe_prompt, probe_mask)
-        optimizer_metrics: dict[str, Any] = {}
-        training_logprobs = await train_step(
-            data,
-            training_client,
-            config.learning_rate,
-            num_substeps=1,
-            loss_fn="importance_sampling",
-            metrics=optimizer_metrics,
+        progress({"event": "probe_before"})
+        before = await _probe_logprobs(
+            sampling_client, probe_prompt, probe_mask, config, progress, budget
         )
+        optimizer_metrics: dict[str, Any] = {}
+        observed_client = _ObservedTrainingClient(
+            training_client, config, progress, budget
+        )
+        try:
+            training_logprobs = await _remote(
+                "optimizer_step",
+                lambda data=data, observed_client=observed_client, optimizer_metrics=optimizer_metrics: (
+                    train_step(
+                        data,
+                        observed_client,
+                        config.learning_rate,
+                        num_substeps=1,
+                        loss_fn="importance_sampling",
+                        metrics=optimizer_metrics,
+                    )
+                ),
+                config,
+                progress,
+            )
+        except BaseException as error:
+            observed_client.uncertain(type(error).__name__)
+            raise
         if len(training_logprobs) != len(data) or any(
-            not tensor.isfinite().all() for tensor in training_logprobs
+            tensor.numel() != datum.model_input.length or not tensor.isfinite().all()
+            for tensor, datum in zip(training_logprobs, data, strict=True)
         ):
             raise NoWeightUpdateError(
                 "Optimizer response lacks finite per-datum training logprobs"
             )
-        paths = await save_checkpoint_async(
-            training_client,
-            f"step-{step + 1}",
-            str(log_path),
-            {"step": step + 1, "injected_runtime": injected},
-            kind="both",
+        progress(
+            {"event": "optimizer_completed", "optimizer_metrics": optimizer_metrics}
+        )
+        paths = await _remote(
+            "checkpoint_updated",
+            lambda step=step: save_checkpoint_async(
+                training_client,
+                f"step-{step + 1}",
+                str(log_path),
+                {"step": step + 1, "injected_runtime": injected},
+                kind="both",
+            ),
+            config,
+            progress,
+        )
+        progress(
+            {"event": "checkpoint_saved", "checkpoint": f"step-{step + 1}", **paths}
         )
         # Always refresh the client: an old sampler would hide real changes.
-        sampling_client = await training_client.create_sampling_client_async(
-            paths["sampler_path"]
+        sampling_client = await _create_sampler(
+            training_client, config, progress, model_path=paths["sampler_path"]
         )
-        after = await _probe_logprobs(sampling_client, probe_prompt, probe_mask)
+        progress({"event": "probe_after"})
+        after = await _probe_logprobs(
+            sampling_client, probe_prompt, probe_mask, config, progress, budget
+        )
         delta = float(np.max(np.abs(after - before)))
         updated = delta > config.update_tolerance
         # Round-trip the exact state just saved, including optimizer state.
         # This does not rewind: it restores the current completed step.
-        state_load_response = await _load_state_checkpoint(
-            training_client, paths["state_path"]
+        state_load_response = await _remote(
+            "state_load_verify",
+            lambda paths=paths: _load_state_checkpoint(
+                training_client, paths["state_path"]
+            ),
+            config,
+            progress,
         )
         step_evidence = {
             "step": step + 1,

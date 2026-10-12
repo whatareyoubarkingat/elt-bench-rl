@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import pickle
+from pathlib import Path
 
 import pytest
 import tinker
@@ -345,3 +346,99 @@ def test_production_group_builder_is_pickleable(renderer):
     restored = pickle.loads(pickle.dumps(builder))
     assert restored.episode_config == builder.episode_config
     assert restored.group_size == 4
+
+
+@pytest.mark.asyncio
+async def test_progress_orders_episode_tool_and_turn_events_without_private_grade(
+    renderer,
+):
+    episodes, events = [], []
+    private = "trusted-grade-details-private-canary"
+
+    def factory(_config):
+        episode = StubEpisode()
+        episode.work_dir = Path("/private/runs") / f"episode_{len(episodes)}"
+        original = episode.dispatch
+
+        def dispatch(name, arguments):
+            feedback = original(name, arguments)
+            if episode.result is not None:
+                episode.result.details["private"] = private
+            return feedback
+
+        episode.dispatch = dispatch
+        episodes.append(episode)
+        return episode
+
+    builder = ELTEnvGroupBuilder(
+        {}, renderer, group_size=2, episode_factory=factory, progress=events.append
+    )
+    group = await do_group_rollout(
+        builder, SubmitCompleter(renderer), strategy=BoundedEpisodeStrategy(1)
+    )
+    assert group.get_total_rewards() == [1, 1]
+    for index in range(2):
+        scoped = [event for event in events if event["episode_index"] == index]
+        assert [event["event"] for event in scoped] == [
+            "episode_start",
+            "episode_ready",
+            "tool_start",
+            "tool_end",
+            "turn_end",
+            "episode_end",
+        ]
+        assert all(event["episode_id"] == f"episode_{index}" for event in scoped[1:])
+        assert scoped[2]["turn"] == scoped[3]["turn"] == scoped[4]["turn"] == 1
+        assert scoped[4]["episode_done"] and scoped[4]["reward"] == 1
+    assert private not in json.dumps(events)
+    assert all(episode.close_count == 1 for episode in episodes)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_event", ["tool_start", "tool_end"])
+async def test_progress_callback_failure_propagates_and_closes_episode(
+    renderer, failure_event
+):
+    episode = StubEpisode()
+
+    def callback(event):
+        if event["event"] == failure_event:
+            raise OSError("Progress journal failed")
+
+    builder = ELTEnvGroupBuilder(
+        {}, renderer, group_size=1, episode_factory=lambda _: episode, progress=callback
+    )
+    with pytest.raises(OSError, match="journal failed"):
+        await do_group_rollout(
+            builder, SubmitCompleter(renderer), strategy=BoundedEpisodeStrategy(1)
+        )
+    assert episode.close_count == 1
+    assert bool(episode.calls) == (failure_event == "tool_end")
+
+
+@pytest.mark.asyncio
+async def test_tool_error_progress_contains_type_but_no_private_exception_text(
+    renderer,
+):
+    episode = StubEpisode()
+    events = []
+
+    def dispatch(_name, _arguments):
+        raise InfrastructureError("private-infrastructure-error-canary")
+
+    episode.dispatch = dispatch
+    builder = ELTEnvGroupBuilder(
+        {},
+        renderer,
+        group_size=1,
+        episode_factory=lambda _: episode,
+        progress=events.append,
+    )
+    with pytest.raises(InfrastructureError):
+        await do_group_rollout(
+            builder, SubmitCompleter(renderer), strategy=BoundedEpisodeStrategy(1)
+        )
+    error = next(event for event in events if event["event"] == "tool_error")
+    assert error["error_type"] == "InfrastructureError"
+    assert "private-infrastructure-error-canary" not in json.dumps(events)
+    assert episode.close_count == 1

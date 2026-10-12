@@ -22,6 +22,21 @@ from .sql_policy import render_references, validate_sql
 from .task import TaskSpec, identifier
 
 
+def _write_private_json(path: Path, value) -> None:
+    """Publish a complete private snapshot after flushing it to disk."""
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    try:
+        with os.fdopen(descriptor, "w") as handle:
+            json.dump(value, handle, indent=2, default=str, allow_nan=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 @dataclass(frozen=True)
 class GradeResult:
     reward: float = 0
@@ -187,8 +202,13 @@ class Episode:
     @property
     def public_prompt(self) -> str:
         return self.task.public_prompt + (
-            "\nQueries can read raw.<source> and transform.<model>. "
+            f"\nSQL dialect: {self.dialect}. "
+            "Queries can read raw.<source> and transform.<model>. "
             "No shell or arbitrary file access is available. Loads replace tables. "
+            "Use configure_load before execute_load for each source. "
+            "write_model stores SQL; run_dbt materializes the models. "
+            "A text-only final answer does not submit a pipeline. "
+            "Finish with submit_pipeline after executing the loads and running dbt. "
             "Submit freezes the logical pipeline and ends this attempt."
         )
 
@@ -252,7 +272,9 @@ class Episode:
         if time.monotonic() - self.started > self.timeout:
             self.result = GradeResult(details={"termination": "timeout"})
             self._save_grade()
-            return {"ok": False, "error": "Episode timeout", "should_stop": True}
+            result = {"ok": False, "error": "Episode timeout", "should_stop": True}
+            self._record(name, arguments, result)
+            return result
         schemas = {s["name"]: s["parameters"] for s in self.tools_schema()}
         try:
             set_deadline = getattr(self.ingestor, "set_deadline", None)
@@ -288,9 +310,7 @@ class Episode:
 
     def _record(self, name, args, result):
         self.trace.append({"tool": name, "arguments": args, "result": result})
-        (self.work_dir / "tools.json").write_text(
-            json.dumps(self.trace, indent=2, default=str) + "\n"
-        )
+        _write_private_json(self.work_dir / "tools.json", self.trace)
 
     def _dispatch(self, name, args):
         source_names = {s.name for s in self.task.sources}
@@ -450,7 +470,7 @@ class Episode:
                 "official_stage2": details["official_stage2"],
                 "details": details,
             }
-            (path / "grade.json").write_text(json.dumps(result, indent=2) + "\n")
+            _write_private_json(path / "grade.json", result)
             return result
         finally:
             self._cleanup_namespace(adapter, path)
@@ -503,9 +523,7 @@ class Episode:
         evidence_path.unlink(missing_ok=True)
 
     def _save_grade(self):
-        (self.work_dir / "grade.json").write_text(
-            json.dumps(asdict(self.result), indent=2) + "\n"
-        )
+        _write_private_json(self.work_dir / "grade.json", asdict(self.result))
 
     def close(self) -> None:
         if not self.closed:

@@ -56,6 +56,7 @@ class EpisodeLike(Protocol):
 
 
 EpisodeFactory = Callable[[dict[str, Any]], EpisodeLike]
+ProgressCallback = Callable[[dict[str, Any]], None]
 
 
 def build_episode(config: dict[str, Any]) -> EpisodeLike:
@@ -73,6 +74,7 @@ class EpisodeTool:
     max_output_tokens: int = 2048
     dispatch_lock: Any = field(default_factory=threading.Lock, repr=False)
     truncated_count: int = 0
+    progress: ProgressCallback | None = field(default=None, repr=False)
 
     @property
     def name(self) -> str:
@@ -96,7 +98,27 @@ class EpisodeTool:
             with self.dispatch_lock:
                 return self.episode.dispatch(self.name, input.arguments)
 
-        response = await asyncio.to_thread(dispatch)
+        if self.progress:
+            self.progress(
+                {"event": "tool_start", "tool": self.name, "arguments": input.arguments}
+            )
+        try:
+            response = await asyncio.to_thread(dispatch)
+        except Exception as error:
+            if self.progress:
+                self.progress(
+                    {
+                        "event": "tool_error",
+                        "tool": self.name,
+                        "error_type": type(error).__name__,
+                    }
+                )
+            raise
+        if self.progress:
+            # Dispatch exposes only model-visible feedback, never grade.details.
+            self.progress(
+                {"event": "tool_end", "tool": self.name, "feedback": response}
+            )
         content = json.dumps(response, ensure_ascii=False, allow_nan=False)
         encoded = self.renderer.tokenizer.encode(content, add_special_tokens=False)
         truncated = len(encoded) > self.max_output_tokens
@@ -159,19 +181,29 @@ class ELTCookbookEnv(EnvFromMessageEnv):
         max_turn_tokens: int = 2048,
         max_context_tokens: int = 32768,
         max_tool_output_tokens: int = 2048,
+        progress: ProgressCallback | None = None,
     ) -> None:
         self.episode = episode
         self.closed = False
+        self.turn = 0
+        self.progress = progress
         self.dispatch_lock = threading.Lock()
         tools = [
             EpisodeTool(
-                episode, spec, renderer, max_tool_output_tokens, self.dispatch_lock
+                episode,
+                spec,
+                renderer,
+                max_tool_output_tokens,
+                self.dispatch_lock,
+                progress=self._progress,
             )
             for spec in episode.tools_schema()
         ]
         prefix = renderer.create_conversation_prefix_with_tools(
             [tool.to_spec() for tool in tools],
-            "Use the provided tools to build and submit an ELT pipeline.",
+            "Use the provided tools to build and submit an ELT pipeline. "
+            "A text-only answer ends the attempt without submission. "
+            "Finish by calling submit_pipeline after loading the sources and running dbt.",
         )
 
         async def reward_fn(_messages: list[Message]) -> tuple[float, dict[str, float]]:
@@ -218,6 +250,30 @@ class ELTCookbookEnv(EnvFromMessageEnv):
             ),
         )
 
+    def _progress(self, event: dict[str, Any]) -> None:
+        if self.progress:
+            work_dir = getattr(self.episode, "work_dir", None)
+            self.progress(
+                {
+                    **event,
+                    "episode_id": work_dir.name if work_dir is not None else None,
+                    "turn": self.turn,
+                }
+            )
+
+    async def step(self, action, *, extra=None):
+        self.turn += 1
+        result = await super().step(action, extra=extra)
+        self._progress(
+            {
+                "event": "turn_end",
+                "reward": result.reward,
+                "episode_done": result.episode_done,
+                "metrics": dict(result.metrics),
+            }
+        )
+        return result
+
     async def close(self) -> None:
         if not self.closed:
 
@@ -229,6 +285,9 @@ class ELTCookbookEnv(EnvFromMessageEnv):
 
             await asyncio.to_thread(close_after_dispatch)
             self.closed = True
+            self._progress(
+                {"event": "episode_end", "submitted": self.episode.submitted}
+            )
 
 
 class LazyELTCookbookEnv(Env):
@@ -245,8 +304,10 @@ class LazyELTCookbookEnv(Env):
         max_turn_tokens: int,
         max_context_tokens: int,
         max_tool_output_tokens: int,
+        progress: ProgressCallback | None = None,
     ) -> None:
         self.factory, self.config, self.renderer = factory, config, renderer
+        self.progress = progress
         self.options = {
             "max_turns": max_turns,
             "max_sampled_tokens": max_sampled_tokens,
@@ -265,6 +326,8 @@ class LazyELTCookbookEnv(Env):
     async def initial_observation(self):
         if self.inner is not None:
             raise RuntimeError("ELT environments are single-use")
+        if self.progress:
+            self.progress({"event": "episode_start"})
         creation = asyncio.create_task(
             asyncio.to_thread(self.factory, dict(self.config))
         )
@@ -277,10 +340,13 @@ class LazyELTCookbookEnv(Env):
             await asyncio.to_thread(episode.close)
             raise
         try:
-            self.inner = ELTCookbookEnv(episode, self.renderer, **self.options)
+            self.inner = ELTCookbookEnv(
+                episode, self.renderer, progress=self.progress, **self.options
+            )
         except BaseException:
             await asyncio.to_thread(episode.close)
             raise
+        self.inner._progress({"event": "episode_ready"})
         return await self.inner.initial_observation()
 
     async def step(self, action, *, extra=None):
@@ -304,6 +370,7 @@ class ELTEnvGroupBuilder(EnvGroupBuilder):
     max_context_tokens: int = 32768
     max_tool_output_tokens: int = 2048
     episode_factory: EpisodeFactory | None = field(default=None, repr=False)
+    progress: ProgressCallback | None = field(default=None, repr=False)
     _envs: list[LazyELTCookbookEnv] = field(
         default_factory=list, init=False, repr=False
     )
@@ -314,7 +381,15 @@ class ELTEnvGroupBuilder(EnvGroupBuilder):
         if self._envs:
             raise RuntimeError("ELT group builders are single-use")
         factory = self.episode_factory or build_episode
-        for _ in range(self.group_size):
+        for episode_index in range(self.group_size):
+            progress = self.progress
+
+            def scoped_progress(
+                event: dict[str, Any], index=episode_index, callback=progress
+            ) -> None:
+                if callback:
+                    callback({**event, "episode_index": index})
+
             self._envs.append(
                 LazyELTCookbookEnv(
                     factory,
@@ -325,6 +400,7 @@ class ELTEnvGroupBuilder(EnvGroupBuilder):
                     max_turn_tokens=self.max_turn_tokens,
                     max_context_tokens=self.max_context_tokens,
                     max_tool_output_tokens=self.max_tool_output_tokens,
+                    progress=scoped_progress if progress else None,
                 )
             )
         return self._envs

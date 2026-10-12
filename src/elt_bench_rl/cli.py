@@ -10,6 +10,7 @@ import subprocess
 from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 
@@ -115,6 +116,8 @@ def parser():
                 "--config", type=Path, help="Override recipe defaults with YAML"
             )
             sub.add_argument("--tokenizer", type=Path)
+            sub.add_argument("--budget-ledger", type=Path)
+            sub.add_argument("--max-cost-usd", type=float, default=10.0)
         if action == "preflight":
             sub.add_argument(
                 "--online",
@@ -193,25 +196,49 @@ def run_command(args, root, output, source_api):
         values["group_size"] = 1
     recipe = TrainingConfig(**values)
     fn = train if args.command == "train" else rollout
-    result = asyncio.run(fn(recipe, allow_paid=args.allow_paid)).as_dict()
-    (output / "manifest.json").write_text(
-        json.dumps(
-            {
-                "source_revision": _revision(root),
-                "recipe": values,
-                "result": result,
-            },
-            indent=2,
+    budget = None
+    if args.allow_paid:
+        from .budget import TokenBudget
+
+        budget = TokenBudget(
+            args.budget_ledger or output / "budget.json",
+            limit_usd=args.max_cost_usd,
+            model_name=recipe.model_name,
         )
-        + "\n"
-    )
+    manifest = {
+        "source_revision": _revision(root),
+        "recipe": values,
+        "status": "running",
+        "budget_ledger": str(budget.path) if budget is not None else None,
+    }
+    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    os.chmod(output / "manifest.json", 0o600)
+    try:
+        result = asyncio.run(
+            fn(recipe, allow_paid=args.allow_paid, budget=budget)
+        ).as_dict()
+    except BaseException as error:
+        manifest.update(status="failed", error_type=type(error).__name__)
+        (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+        raise
+    manifest.update(status="completed", result=result)
+    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return result
 
 
 def main():
     args = parser().parse_args()
     root = args.project_root.resolve()
-    load_dotenv(root / ".env", override=False)
+    load_dotenv(root / ".env", override=True)
+    # HTTPX otherwise imports an optional SOCKS module even when both HTTP
+    # routes already use an available HTTP proxy. Limit this to this process.
+    if all(
+        urlsplit(os.getenv(name, "")).scheme in {"http", "https"}
+        for name in ("HTTP_PROXY", "HTTPS_PROXY")
+    ):
+        for name in ("ALL_PROXY", "all_proxy"):
+            if urlsplit(os.getenv(name, "")).scheme.startswith("socks"):
+                os.environ.pop(name, None)
     output = (
         args.output or root / "runs" / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     ).resolve()

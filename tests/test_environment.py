@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import time
 
+import pytest
+
+from elt_bench_rl import environment
 from elt_bench_rl.destination import DuckDBAdapter
 from elt_bench_rl.pipeline import PipelineBundle
 
@@ -69,6 +72,10 @@ def test_timeout_zero(episode):
     episode.started = time.monotonic() - 1000
     result = episode.dispatch("read_task", {})
     assert result["should_stop"] and episode.result.reward == 0
+    assert (
+        json.loads((episode.work_dir / "tools.json").read_text())[-1]["result"]
+        == result
+    )
 
 
 def test_stale_csv_cannot_spoof_reward(episode, correct_sql):
@@ -116,3 +123,49 @@ def test_literal_table_references_are_compiled_to_episode_sources(episode, corre
     assert "{{ source('raw', 'train') }}" in generated
     assert "{{ source('raw', 'cars') }}" in generated
     assert episode.dispatch("submit_pipeline", {})["reward"] == 1
+
+
+def test_public_prompt_states_dialect_and_submission_without_reference_values(episode):
+    prompt = episode.public_prompt
+    assert "SQL dialect: duckdb" in prompt
+    assert "configure_load before execute_load" in prompt
+    assert "text-only final answer does not submit" in prompt
+    assert str(episode.reference_root) not in prompt
+    assert "ground_truth" not in prompt
+
+
+def test_private_progress_snapshots_are_atomic_and_flush_before_publish(
+    episode, monkeypatch
+):
+    observed = []
+    original_replace = environment.os.replace
+
+    def replace(source, destination):
+        snapshot = json.loads(source.read_text())
+        assert snapshot[0]["tool"] == "read_task"
+        assert source.stat().st_mode & 0o777 == 0o600
+        observed.append("publish")
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(environment.os, "fsync", lambda _: observed.append("flush"))
+    monkeypatch.setattr(environment.os, "replace", replace)
+    episode.dispatch("read_task", {})
+    assert observed == ["flush", "publish"]
+    assert (episode.work_dir / "tools.json").stat().st_mode & 0o777 == 0o600
+    assert not list(episode.work_dir.glob("*.tmp"))
+
+
+def test_failed_snapshot_publish_preserves_previous_json_and_cleans_temporary(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "snapshot.json"
+    path.write_text('{"previous": true}\n')
+
+    def fail_publish(_source, _destination):
+        raise OSError("Fixture publish failure")
+
+    monkeypatch.setattr(environment.os, "replace", fail_publish)
+    with pytest.raises(OSError, match="publish failure"):
+        environment._write_private_json(path, {"next": True})
+    assert json.loads(path.read_text()) == {"previous": True}
+    assert not list(tmp_path.glob("*.tmp"))

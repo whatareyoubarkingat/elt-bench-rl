@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -109,8 +110,9 @@ class TrainingClient:
         self.saved[path] = self.weight
         return Future(self.events, f"sampler:{name}", SimpleNamespace(path=path))
 
-    async def create_sampling_client_async(self, path):
-        return SamplingClient(self, self.saved[path])
+    async def create_sampling_client_async(self, model_path, retry_config=None):
+        assert retry_config.enable_retry_logic is False
+        return SamplingClient(self, self.saved[model_path])
 
     async def forward_backward_async(self, data, *, loss_fn, loss_fn_config=None):
         self.events.append("submit:forward_backward")
@@ -396,6 +398,9 @@ async def test_standalone_rollout_can_sample_saved_policy(
 
             return Sampler()
 
+        async def close(self, status):
+            assert status == "success"
+
     monkeypatch.setattr(training.tinker, "ServiceClient", Service)
     path = "tinker://offline/sampler/trained-policy"
     factory, _episodes = factory_with_rewards([1])
@@ -406,7 +411,8 @@ async def test_standalone_rollout_can_sample_saved_policy(
         episode_factory=factory,
     )
     assert result.rewards == [1]
-    assert requests == [{"model_path": path}]
+    assert len(requests) == 1 and requests[0]["model_path"] == path
+    assert requests[0]["retry_config"].enable_retry_logic is False
 
 
 @pytest.mark.asyncio
@@ -473,3 +479,228 @@ async def test_dataset_builder_uses_offline_tokenizer_and_fixed_groups(
 async def test_invalid_training_configuration_fails_before_clients(config, changes):
     with pytest.raises(ValueError):
         await train(replace(config, **changes))
+
+
+class Reservation:
+    def __init__(self, operation, input_tokens, output_tokens):
+        self.operation = operation
+        self.reserved = (input_tokens, output_tokens)
+        self.completed = None
+        self.error_type = None
+
+    def complete(self, input_tokens, output_tokens):
+        assert self.completed is None and self.error_type is None
+        assert input_tokens <= self.reserved[0] and output_tokens <= self.reserved[1]
+        self.completed = (input_tokens, output_tokens)
+
+    def uncertain(self, error_type):
+        assert self.completed is None and self.error_type is None
+        self.error_type = error_type
+
+
+class Budget:
+    def __init__(self, *, max_calls=None):
+        self.reservations = []
+        self.max_calls = max_calls
+
+    def reserve(self, operation, *, input_tokens, output_tokens, metadata):
+        if self.max_calls is not None and len(self.reservations) >= self.max_calls:
+            raise RuntimeError("Token budget exhausted")
+        assert metadata["injected_runtime"] is True
+        reservation = Reservation(operation, input_tokens, output_tokens)
+        self.reservations.append(reservation)
+        return reservation
+
+
+def progress_events(config):
+    return [
+        json.loads(line)
+        for line in (Path(config.log_path) / "progress.jsonl").read_text().splitlines()
+    ]
+
+
+@pytest.mark.asyncio
+async def test_one_ledger_covers_standalone_sampling_probes_and_actual_training(
+    config, renderer
+):
+    budget = Budget()
+    factory, _episodes = factory_with_rewards([1])
+    await rollout(
+        replace(config, group_size=1),
+        completer=SubmitCompleter(renderer),
+        renderer=renderer,
+        episode_factory=factory,
+        budget=budget,
+    )
+    factory, _episodes = factory_with_rewards([0, 0.25, 0.75, 1])
+    client = TrainingClient()
+    training_config = replace(config, log_path=config.log_path + "-step")
+    await train(
+        training_config,
+        training_client=client,
+        renderer=renderer,
+        episode_factory=factory,
+        completer_factory=lambda _: SubmitCompleter(renderer),
+        budget=budget,
+    )
+    operations = [reservation.operation for reservation in budget.reservations]
+    assert operations == ["sample"] * 5 + ["probe", "train", "probe"]
+    assert all(reservation.completed is not None for reservation in budget.reservations)
+    training_charge = budget.reservations[-2]
+    full_context_tokens = sum(d.model_input.length for d in client.forward_calls[0][0])
+    assert training_charge.completed == (full_context_tokens, 0)
+    assert full_context_tokens > sum(
+        int((d.loss_fn_inputs["advantages"].to_numpy() != 0).sum())
+        for d in client.forward_calls[0][0]
+    )
+    assert budget.reservations[-1].reserved[1] == 1
+    events = progress_events(training_config)
+    assert any(event["event"] == "optimizer_completed" for event in events)
+    assert [event["sequence"] for event in events] == list(range(1, len(events) + 1))
+
+
+@pytest.mark.asyncio
+async def test_budget_denial_precedes_a_second_sample_and_still_closes_episode(
+    config, renderer
+):
+    budget = Budget(max_calls=1)
+    factory, episodes = factory_with_rewards([1])
+    with pytest.raises(RuntimeError, match="budget exhausted"):
+        await rollout(
+            replace(config, group_size=2),
+            completer=SubmitCompleter(renderer),
+            renderer=renderer,
+            episode_factory=factory,
+            budget=budget,
+        )
+    assert len(budget.reservations) == 1
+    assert len(episodes) == 2 and all(episode.close_count == 1 for episode in episodes)
+    events = progress_events(config)
+    assert len([event for event in events if event["event"] == "sample_start"]) == 1
+    assert any(event["event"] == "budget_denied" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_sampling_timeout_is_not_retried_and_keeps_uncertain_reservation(
+    config, renderer
+):
+    class NeverCompletes(SubmitCompleter):
+        calls = 0
+
+        async def __call__(self, *args, **kwargs):
+            self.calls += 1
+            await asyncio.Event().wait()
+
+    completer = NeverCompletes(renderer)
+    budget = Budget()
+    factory, episodes = factory_with_rewards([1])
+    with pytest.raises(training.RemoteCallTimeout):
+        await rollout(
+            replace(config, group_size=1, remote_timeout_seconds=0.02),
+            completer=completer,
+            renderer=renderer,
+            episode_factory=factory,
+            budget=budget,
+        )
+    assert completer.calls == 1 and episodes[0].close_count == 1
+    assert budget.reservations[0].completed is None
+    assert budget.reservations[0].error_type == "TimeoutError"
+    failure = json.loads((Path(config.log_path) / "failure.json").read_text())
+    assert failure["error_type"] == "RemoteCallTimeout"
+    errors = [
+        event for event in progress_events(config) if event["event"] == "sample_error"
+    ]
+    assert errors[0]["remote_outcome"] == "uncertain"
+
+
+@pytest.mark.asyncio
+async def test_completed_action_survives_tool_failure_without_private_error_text(
+    config, renderer
+):
+    episode = StubEpisode(1)
+
+    def fail_dispatch(*args):
+        raise InfrastructureError("private-credential-canary private-reference-canary")
+
+    episode.dispatch = fail_dispatch
+    with pytest.raises(InfrastructureError):
+        await rollout(
+            replace(config, group_size=1),
+            completer=SubmitCompleter(renderer),
+            renderer=renderer,
+            episode_factory=lambda _: episode,
+        )
+    events = progress_events(config)
+    actions = [event for event in events if event["event"] == "sample_end"]
+    assert len(actions) == 1 and actions[0]["action_tokens"] == response_tokens(
+        renderer
+    )
+    assert len(actions[0]["sampled_logprobs"]) == len(actions[0]["action_tokens"])
+    audit = (Path(config.log_path) / "progress.jsonl").read_text()
+    audit += (Path(config.log_path) / "failure.json").read_text()
+    assert "private-credential-canary" not in audit
+    assert "private-reference-canary" not in audit
+    assert episode.close_count == 1
+
+
+@pytest.mark.asyncio
+async def test_optimizer_timeout_does_not_repeat_mutation(config, renderer):
+    class StalledOptimizer(TrainingClient):
+        async def optim_step_async(self, params):
+            future = await super().optim_step_async(params)
+
+            async def never():
+                await asyncio.Event().wait()
+
+            future.result_async = never
+            return future
+
+    client = StalledOptimizer()
+    factory, _episodes = factory_with_rewards([0, 0.25, 0.75, 1])
+    budget = Budget()
+    with pytest.raises(training.RemoteCallTimeout):
+        await train(
+            replace(config, remote_timeout_seconds=0.04),
+            training_client=client,
+            renderer=renderer,
+            episode_factory=factory,
+            completer_factory=lambda _: SubmitCompleter(renderer),
+            budget=budget,
+        )
+    assert len(client.optim_calls) == len(client.forward_calls) == 1
+    assert len(client.probes) == 1 and not client.load_calls
+    assert not (Path(config.log_path) / "training_result.json").exists()
+    assert budget.reservations[-1].operation == "train"
+    assert budget.reservations[-1].completed is not None
+
+
+@pytest.mark.asyncio
+async def test_owned_service_closes_on_constant_reward_failure(
+    config, renderer, monkeypatch
+):
+    client = TrainingClient()
+    statuses = []
+
+    class Service:
+        async def create_lora_training_client_async(self, **kwargs):
+            return client
+
+        async def close(self, status):
+            statuses.append(status)
+
+    monkeypatch.setattr(training.tinker, "ServiceClient", Service)
+    factory, _episodes = factory_with_rewards([0])
+    with pytest.raises(NoLearningSignalError):
+        await train(
+            replace(config, max_constant_group_retries=0),
+            allow_paid=True,
+            renderer=renderer,
+            episode_factory=factory,
+            completer_factory=lambda _: SubmitCompleter(renderer),
+        )
+    assert statuses == ["errored"]
+    events = progress_events(config)
+    assert any(
+        event.get("phase") == "session_close" and event["event"] == "remote_end"
+        for event in events
+    )
