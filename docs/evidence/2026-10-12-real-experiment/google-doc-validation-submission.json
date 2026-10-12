@@ -10,10 +10,10 @@
   ],
   "body_matches_report": true,
   "updated_scope": [
-    "Objective and Current Status: first paragraph",
-    "Training and Validation Evidence: last paragraph"
+    "Training and Validation Evidence: spending and storage cost sentences removed"
   ],
   "other_content_preserved_exactly": true,
+  "spending_section_absent": true,
   "code_and_run_instructions_section_absent": true,
   "remaining_hyperlinks": 0,
   "written_minimum_gate_evidence_complete": true,
