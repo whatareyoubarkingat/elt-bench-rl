@@ -872,3 +872,126 @@ async def test_checkpoint_recovery_rejects_corrupt_prompt_before_remote_calls(
             renderer=renderer,
         )
     assert len(client.probes) == probes
+
+
+async def recorded_recovery_source(config, renderer, *, steps=1):
+    client = TrainingClient()
+    factory, _episodes = factory_with_rewards([0, 0.25, 0.75, 1])
+    await train(
+        replace(config, max_steps=steps),
+        training_client=client,
+        renderer=renderer,
+        episode_factory=factory,
+        completer_factory=lambda _: SubmitCompleter(renderer),
+    )
+    source = Path(config.log_path)
+    (source / "manifest.json").write_text(json.dumps({"status": "failed"}))
+    return source, client
+
+
+def write_rows(path, rows):
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+
+
+@pytest.mark.asyncio
+async def test_recovery_ignores_later_unoptimized_group(config, renderer):
+    source, _client = await recorded_recovery_source(config, renderer)
+    groups = training._read_jsonl(source / "train_rollouts.jsonl")
+    later = json.loads(json.dumps(groups[0]))
+    later.update(step=1, rewards=[0, 0, 0, 0])
+    write_rows(source / "train_rollouts.jsonl", groups + [later])
+    _before, after, _prompt, _mask, proof = training._recovery_probe(
+        source, config, renderer
+    )
+    assert after["step"] == 1
+    assert proof["original_group_step"] == 0
+    assert proof["original_checkpoint_step"] == proof["original_group_step"] + 1
+    assert proof["original_rewards"] == groups[0]["rewards"]
+
+
+@pytest.mark.parametrize("field,value", [("step", 4), ("attempt", 1)])
+@pytest.mark.asyncio
+async def test_recovery_rejects_optimizer_event_for_another_group(
+    config, renderer, field, value
+):
+    source, client = await recorded_recovery_source(config, renderer)
+    events = training._read_jsonl(source / "progress.jsonl")
+    for event in events:
+        if (
+            event.get("event") == "remote_end"
+            and event.get("phase") == "optimizer_wait"
+        ):
+            event[field] = value
+    write_rows(source / "progress.jsonl", events)
+    with pytest.raises(ValueError, match="matching optimized rollout group"):
+        await training.verify_checkpoint(
+            replace(config, log_path=config.log_path + "-verification"),
+            training_run=source,
+            service_client=CheckpointService(client),
+            renderer=renderer,
+        )
+    assert len(client.probes) == 2
+
+
+@pytest.mark.asyncio
+async def test_recovery_rejects_checkpoint_step_gap(config, renderer):
+    source, _client = await recorded_recovery_source(config, renderer)
+    records = training._read_jsonl(source / "checkpoints.jsonl")
+    records[-1]["step"] = 2
+    write_rows(source / "checkpoints.jsonl", records)
+    with pytest.raises(ValueError, match="immediately preceding checkpoint"):
+        training._recovery_probe(source, config, renderer)
+
+
+@pytest.mark.asyncio
+async def test_recovery_excludes_a_longer_parse_masked_action(config, renderer):
+    source, _client = await recorded_recovery_source(config, renderer)
+    groups = training._read_jsonl(source / "train_rollouts.jsonl")
+    valid = groups[0]["trajectories"][0]["transitions"][0]
+    masked = json.loads(json.dumps(valid))
+    masked["action_tokens"] *= 2
+    masked["metrics"]["parse_error_masked"] = 1
+    groups[0]["trajectories"][0]["transitions"].append(masked)
+    write_rows(source / "train_rollouts.jsonl", groups)
+    _before, _after, _prompt, mask, proof = training._recovery_probe(
+        source, config, renderer
+    )
+    assert int(mask.sum()) == len(valid["action_tokens"])
+    assert proof["action_tokens"] == valid["action_tokens"]
+
+
+@pytest.mark.asyncio
+async def test_recovery_rejects_only_parse_masked_actions(config, renderer):
+    source, _client = await recorded_recovery_source(config, renderer)
+    groups = training._read_jsonl(source / "train_rollouts.jsonl")
+    for trajectory in groups[0]["trajectories"]:
+        for transition in trajectory["transitions"]:
+            transition["metrics"]["parse_error_masked"] = 1
+    write_rows(source / "train_rollouts.jsonl", groups)
+    with pytest.raises(NoLearningSignalError, match="nonzero trajectory advantage"):
+        training._recovery_probe(source, config, renderer)
+
+
+@pytest.mark.asyncio
+async def test_multistep_recovery_compares_predecessor_and_accepts_resume_config(
+    config, renderer
+):
+    source, client = await recorded_recovery_source(config, renderer, steps=2)
+    calls = len(client.optim_calls)
+    result = await training.verify_checkpoint(
+        replace(
+            config,
+            log_path=config.log_path + "-verification",
+            load_checkpoint_path="tinker://offline/state/resume-input",
+        ),
+        training_run=source,
+        service_client=CheckpointService(client),
+        renderer=renderer,
+    )
+    assert result["original_checkpoint_step"] == 2
+    assert result["original_group_step"] == 1
+    assert result["comparison_predecessor_step"] == 1
+    assert result["predecessor_sampler_path"].endswith("/step-1")
+    assert result["sampler_path"].endswith("/step-2")
+    assert result["probe_max_abs_logprob_delta"] == pytest.approx(0.001)
+    assert len(client.optim_calls) == calls == 2

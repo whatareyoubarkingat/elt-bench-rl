@@ -171,7 +171,7 @@ def render(run_dir: Path, output: Path) -> None:
         "<h1>ELT-Bench real experiment</h1>"
         "<small>Recorded local evidence. Not the Tinker console or an invoice.</small>"
         + proof_rows
-        + f"<small>Run: 2026-10-12<br>Source: {show(summary['source_revision'])}</small>"
+        + f"<small>Run: 2026-10-12<br>Training source: {show(summary['source_revision'])}</small>"
         "</main></html>"
     )
     update_values = {

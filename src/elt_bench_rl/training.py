@@ -40,7 +40,7 @@ from tinker_cookbook.rl.data_processing import (
 )
 from tinker_cookbook.rl.rollouts import do_group_rollout
 from tinker_cookbook.rl.train import train_step
-from tinker_cookbook.rl.types import TrajectoryGroup
+from tinker_cookbook.rl.types import PARSE_ERROR_MASKED_METRIC_KEY, TrajectoryGroup
 
 from .cookbook_env import (
     BoundedEpisodeStrategy,
@@ -1174,19 +1174,38 @@ def _recovery_probe(training_run: Path, config: TrainingConfig, renderer: Render
             "Verification model/renderer differs from the recorded training run"
         )
     checkpoints = _read_jsonl(training_run / "checkpoints.jsonl")
-    initial = [record for record in checkpoints if record.get("name") == "initial"]
-    updated = [record for record in checkpoints if record.get("step", 0) > 0]
-    if len(initial) != 1 or not updated:
+    by_step = {}
+    for record in checkpoints:
+        step = record.get("step")
+        if not isinstance(step, int) or isinstance(step, bool) or step < 0:
+            raise ValueError("Checkpoint step metadata is invalid")
+        if step in by_step:
+            raise ValueError("Checkpoint step metadata is ambiguous")
+        by_step[step] = record
+    if 0 not in by_step or max(by_step) < 1:
         raise ValueError("Verification requires initial and completed-step checkpoints")
-    latest = updated[-1]
+    latest = by_step[max(by_step)]
+    previous = by_step.get(latest["step"] - 1)
+    if previous is None:
+        raise ValueError("Latest checkpoint has no immediately preceding checkpoint")
     groups = _read_jsonl(training_run / "train_rollouts.jsonl")
-    group = groups[-1]
     events = _read_jsonl(training_run / "progress.jsonl")
-    if not any(
-        event.get("event") == "remote_end" and event.get("phase") == "optimizer_wait"
+    completed = {
+        (event.get("step"), event.get("attempt"))
         for event in events
-    ):
-        raise ValueError("Recorded optimizer completion evidence is missing")
+        if event.get("event") == "remote_end" and event.get("phase") == "optimizer_wait"
+    }
+    matching = [
+        group
+        for group in groups
+        if group.get("step") == latest["step"] - 1
+        and (group.get("step"), group.get("attempt")) in completed
+    ]
+    if len(matching) != 1:
+        raise ValueError(
+            "Latest checkpoint requires one matching optimized rollout group"
+        )
+    group = matching[0]
     stats = [
         row
         for row in _read_jsonl(training_run / "metrics.jsonl")
@@ -1205,6 +1224,8 @@ def _recovery_probe(training_run: Path, config: TrainingConfig, renderer: Render
         if reward != mean
         for transition in trajectory["transitions"]
         if transition["action_tokens"]
+        and float(transition.get("metrics", {}).get(PARSE_ERROR_MASKED_METRIC_KEY, 0))
+        < 1
     ]
     if not transitions:
         raise NoLearningSignalError(
@@ -1248,18 +1269,22 @@ def _recovery_probe(training_run: Path, config: TrainingConfig, renderer: Render
         "source_sha256": hashes,
         "original_injected_runtime": recorded.get("injected_runtime"),
         "original_optimizer_completed": True,
+        "original_checkpoint_step": latest["step"],
+        "original_group_step": group["step"],
+        "original_group_attempt": group["attempt"],
+        "comparison_predecessor_step": previous["step"],
         "original_rewards": group["rewards"],
         "original_effective_action_tokens": stats[-1]["effective_action_tokens"],
         "original_training_input_tokens": stats[-1].get("training_input_tokens"),
         "prompt_tokens": len(prompt_tokens),
         "action_tokens": action_tokens,
-        "probe_selection_rule": "longest_recorded_action_with_nonzero_trajectory_advantage",
+        "probe_selection_rule": "longest_unmasked_recorded_action_with_nonzero_trajectory_advantage",
         "probe_sequence_sha256": hashlib.sha256(json.dumps(full).encode()).hexdigest(),
         "token_provenance": "exact_recorded_tokens"
         if exact is not None
         else "decoded_observation_roundtrip_and_recorded_length",
     }
-    return initial[0], latest, tinker.ModelInput.from_ints(full), mask, provenance
+    return previous, latest, tinker.ModelInput.from_ints(full), mask, provenance
 
 
 async def verify_checkpoint(
@@ -1276,7 +1301,11 @@ async def verify_checkpoint(
     Writes new verification evidence only. The original failed/succeeded run is
     immutable input, including its manifest and checkpoint records.
     """
-    config = _config(config)
+    # Verification selects recorded checkpoint pairs; resume/sampler overrides
+    # from the original training configuration are not instructions to load here.
+    config = replace(
+        _config(config), load_checkpoint_path=None, sampler_checkpoint_path=None
+    )
     config.validate(training=False)
     injected = service_client is not None
     if service_client is None and not allow_paid:
@@ -1290,7 +1319,7 @@ async def verify_checkpoint(
             "Verification output must be separate from the original training run"
         )
     renderer = renderer or load_renderer(config)
-    initial, updated, prompt, mask, provenance = _recovery_probe(
+    previous, updated, prompt, mask, provenance = _recovery_probe(
         source, config, renderer
     )
     if not injected and provenance["original_injected_runtime"] is not False:
@@ -1309,7 +1338,7 @@ async def verify_checkpoint(
         if service is None:
             service = tinker.ServiceClient()
         before_client = await _create_sampler(
-            service, config, progress, model_path=initial["sampler_path"]
+            service, config, progress, model_path=previous["sampler_path"]
         )
         before = await _probe_logprobs(
             before_client, prompt, mask, config, progress, budget
@@ -1328,7 +1357,8 @@ async def verify_checkpoint(
             "verification_only": True,
             "optimizer_repeated": False,
             "renderer_name": _renderer_name(config),
-            "initial_sampler_path": initial["sampler_path"],
+            "initial_sampler_path": previous["sampler_path"],
+            "predecessor_sampler_path": previous["sampler_path"],
             "sampler_path": updated["sampler_path"],
             "state_path": updated["state_path"],
             "probe_before_logprobs": before.tolist(),
