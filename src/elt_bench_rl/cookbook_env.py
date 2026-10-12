@@ -203,7 +203,12 @@ class ELTCookbookEnv(EnvFromMessageEnv):
             [tool.to_spec() for tool in tools],
             "Use the provided tools to build and submit an ELT pipeline. "
             "A text-only answer ends the attempt without submission. "
-            "Finish by calling submit_pipeline after loading the sources and running dbt.",
+            "Finish by calling submit_pipeline after loading the sources and running dbt. "
+            f"You have at most {max_turns} assistant turns and "
+            f"{max_sampled_tokens} total generated tokens. "
+            "Reserve a turn for submit_pipeline. After successful dbt execution, "
+            "verify the specification with a few set-based queries instead of "
+            "checking every source row individually, then submit within the limit.",
         )
 
         async def reward_fn(_messages: list[Message]) -> tuple[float, dict[str, float]]:
