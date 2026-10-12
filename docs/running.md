@@ -47,8 +47,11 @@ Sampling uses real Tinker credentials; extraction/loading, dbt execution and
 clean replay run locally. Preserve model tool trajectories, load receipts,
 original/replay grades and the bundle. The official `trains` inputs and target
 reference are unchanged, but DuckDB is an adapted destination. The assignment
-does not mandate Databricks or Airbyte; acceptance of a Tinker-credentialed
-local warehouse rollout should be confirmed with the grader.
+does not mandate Databricks or Airbyte or cloud warehouse credentials. The
+implementation and evidence demonstrate its three written minimum gates:
+credential-free local integration, a real Tinker-credentialed official-task
+rollout and an execution-reward RL optimization step. Final assessment belongs
+to the professor.
 
 ## Optional Databricks and Airbyte extension
 

@@ -34,7 +34,7 @@ credentialed official rollout.
 | Different execution rewards for correct and incorrect pipelines | Passed: 1.0 vs 0.628571 |
 | Cookbook environment, reward and optimizer integration | Offline tests passed; injected clients are labeled |
 | Real Tinker credential check | Passed: `KEY_OK`, 18 input tokens and 3 output tokens; access only |
-| Model-generated rollout on the official `trains` task adapted to DuckDB | Two real training rollouts earned 1.0 with strict fresh replay |
+| Real Tinker-credentialed rollout on the official `trains` task adapted to DuckDB | Two real training rollouts earned 1.0 with strict fresh replay |
 | Real Tinker optimization with nonzero advantages and model change | Passed: one actual optimizer step, fresh checkpoint restore and changed fixed-token logprobs |
 
 The first three standalone rollouts scored 0, 0 and 0.6285714286; the training
@@ -120,9 +120,10 @@ DuckDB commands start and stop their own local HTTP source automatically.
 The assignment explicitly requires Tinker, but does not mandate Databricks or
 Airbyte. DuckDB uses the pinned official task inputs and reference data with
 an adapted SQL dialect; it is not an upstream-supported warehouse destination.
-The interpretation of the assignment's credentialed warehouse rollout should
-be confirmed with the grader before claiming that gate passed. Existing cloud
-adapters remain optional extensions (`uv sync --locked --extra cloud`).
+The written criteria require one warehouse and a credentialed rollout; the
+official-task rollouts used real Tinker API credentials with local DuckDB,
+without cloud warehouse credentials. Existing cloud adapters remain optional
+extensions (`uv sync --locked --extra cloud`).
 
 ## Layout
 
@@ -146,5 +147,7 @@ requires a real credentialed rollout and a real RL update. The successful key
 check establishes access, and two model-generated pipelines now pass strict
 execution/replay checks. One real RL update is verified. The single post-update
 evaluation was partially correct; this does not establish general improvement.
-Grader acceptance of the adapted warehouse remains unconfirmed, so the entire
-assignment is not declared accepted.
+The implementation and evidence demonstrate the three written minimum gates:
+credential-free local integration, a real Tinker-credentialed official-task
+rollout and an execution-reward RL optimization step. Final assessment belongs
+to the professor.

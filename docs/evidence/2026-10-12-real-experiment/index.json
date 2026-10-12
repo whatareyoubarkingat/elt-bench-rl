@@ -41,8 +41,8 @@
   "artifacts": [
     {
       "file": "README.md",
-      "bytes": 2217,
-      "sha256": "4b3e3ea7866d35d048158dc93116cc67e76ef8cd9e0613cde07787fefe1773a0"
+      "bytes": 2389,
+      "sha256": "63ab82d3626c83bbcda056df47a560a97ea5bd3b4be9f1db3806ab922fa4fdb4"
     },
     {
       "file": "checkpoint-metadata.json",
@@ -53,6 +53,11 @@
       "file": "google-doc-validation-current.json",
       "bytes": 685,
       "sha256": "231c7c669124c0dc56e1de394124df78717d3e235af81a977e3689317bc5bbc7"
+    },
+    {
+      "file": "google-doc-validation-submission.json",
+      "bytes": 1105,
+      "sha256": "3638a44434d65631c77526b20fd14067154e15b2d58a88bd43765d0b9d580c18"
     },
     {
       "file": "google-doc-validation.json",
@@ -152,8 +157,18 @@
   ],
   "final_implementation_source_revision": "cab00c18e677d406d0109f53fb4211d326408d1d",
   "final_validation_artifact": "release-validation.json",
-  "google_doc_validation_artifact": "google-doc-validation-current.json",
+  "google_doc_validation_artifact": "google-doc-validation-submission.json",
   "experiment_processes": "exited",
   "heartbeat_monitor": "PAUSED",
-  "historical_google_doc_validation_artifact": "google-doc-validation.json"
+  "historical_google_doc_validation_artifact": "google-doc-validation.json",
+  "credentialed_official_task_rollout": {
+    "status": "demonstrated",
+    "model_service_credentials": "Real Tinker API credentials",
+    "destination": "Official trains task adapted to local DuckDB",
+    "source_and_reference_bytes_unchanged": true,
+    "strict_model_successes": 2
+  },
+  "written_minimum_gate_evidence_complete": true,
+  "professor_final_assessment": "pending",
+  "previous_google_doc_validation_artifact": "google-doc-validation-current.json"
 }

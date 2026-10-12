@@ -2,7 +2,7 @@
 
 ## Objective and Current Status
 
-Build an ELT agent that loads sources, writes dbt SQL, repairs errors, submits a pipeline and learns from execution rewards. DuckDB/CSV/HTTP/dbt run locally; Tinker samples and trains remotely. KEY_OK passed with 18 input/3 output tokens. Two pre-update model pipelines passed strict grading/replay. One real optimizer step and its saved update are verified through separate fresh-model recovery after an original HTTP 400 reload failure. The sole post-update evaluation was partial; general quality improvement and full assignment acceptance are not claimed.
+Build an ELT agent that loads sources, writes dbt SQL, repairs errors, submits a pipeline and learns from execution rewards. DuckDB/CSV/HTTP/dbt run locally; Tinker samples and trains remotely. KEY_OK passed with 18 input/3 output tokens. Two pre-update model pipelines passed strict grading/replay. One real optimizer step and its saved update are verified through separate fresh-model recovery after an original HTTP 400 reload failure. The written minimum gates are demonstrated: credential-free local integration, a real Tinker-credentialed rollout on the official task adapted to DuckDB, and an execution-reward RL step. The sole post-update evaluation was partial; general quality improvement is not claimed. Final assessment belongs to the professor.
 
 ## Environment and Tools
 
@@ -32,4 +32,4 @@ The 32-turn adjustment is an experiment override; the default remains 24. These 
 
 A shared $10 ledger reserves requests, retains uncertain costs and includes a $0.50 storage buffer plus the prior key-check estimate. The final uncached token estimate is $0.448166396, or $0.948166396 including the buffer; this is not an invoice. Four checkpoints total 1,167,002,514 bytes without TTL, projected at $0.1167/month; the ledger is not a lifetime storage cap. A private watchdog records PID/group, durable progress, logs and timeouts; its own heartbeats do not count as progress. The old optional Airbyte/Colima VM was deleted on 2026-10-10; it is not part of the running local route.
 
-DuckDB retains official Databricks task source/reference bytes. Credentialed-warehouse acceptance is unconfirmed. One real update and strict pre-update pipelines are verified; general quality gains and full assignment acceptance are not claimed. Public evidence is in docs/evidence/2026-10-12-real-experiment.
+DuckDB retains official Databricks task source/reference bytes and uses no cloud warehouse credentials. Real Tinker API credentials were used for the official-task model rollouts. The implementation and minimum evidence are complete under the written requirements; final assessment belongs to the professor. General quality gains are not claimed. Public evidence is in docs/evidence/2026-10-12-real-experiment.

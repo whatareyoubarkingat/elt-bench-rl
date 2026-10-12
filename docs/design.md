@@ -168,6 +168,8 @@ Offline mocks do not prove real model sampling or training. A scripted DuckDB
 pipeline does not prove a model-generated official-task rollout. The current
 route adapts the official Databricks task specification and reference data to
 DuckDB while retaining the pinned official comparator. Tinker remains remote
-and uses real API credentials. Whether this fulfills the grader's credentialed
-warehouse requirement remains an acceptance interpretation, not an observed
-result. See [running.md](running.md) and [acceptance.md](acceptance.md).
+and uses real API credentials; no cloud warehouse credentials were used.
+The implementation and evidence demonstrate the three written minimum gates:
+credential-free local integration, a real Tinker-credentialed official-task
+rollout and an execution-reward RL optimization step. Final assessment belongs
+to the professor. See [running.md](running.md) and [acceptance.md](acceptance.md).

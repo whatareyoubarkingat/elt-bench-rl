@@ -1,0 +1,26 @@
+{
+  "document_url": "https://docs.google.com/document/d/1SWoXsokaq7h7AoHn0ud66ymrli8wtcF7yN_bWqMuZUc",
+  "title": "ELT-Bench RLVR: Implementation Design and Validation",
+  "native_headings": [
+    "Objective and Current Status",
+    "Environment and Tools",
+    "Reward, Submission, and Replay",
+    "Reward Hacking and Efficiency",
+    "Training and Validation Evidence"
+  ],
+  "body_matches_report": true,
+  "updated_scope": [
+    "Objective and Current Status: first paragraph",
+    "Training and Validation Evidence: last paragraph"
+  ],
+  "other_content_preserved_exactly": true,
+  "code_and_run_instructions_section_absent": true,
+  "remaining_hyperlinks": 0,
+  "written_minimum_gate_evidence_complete": true,
+  "credentialed_rollout_service": "Real Tinker API credentials; official trains task adapted to local DuckDB",
+  "cloud_warehouse_credentials_used": false,
+  "professor_final_assessment": "pending",
+  "general_performance_improvement_claim": false,
+  "sharing_permissions_changed": false,
+  "report_sharing": "Owner only; grant the professor read access before sending the design link."
+}

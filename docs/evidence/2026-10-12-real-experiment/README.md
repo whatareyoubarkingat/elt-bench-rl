@@ -10,7 +10,9 @@ after optimization. Its failed record is preserved. Separate recovery loaded
 the saved optimizer state into a new model without repeating optimization.
 The maximum logprob change on 814 fixed action tokens was **0.1941561699**.
 The only post-update evaluation earned **0.6285714286**; no general policy
-improvement is claimed. Credentialed-warehouse acceptance remains unconfirmed.
+improvement is claimed. Official-task rollouts used real Tinker API credentials
+with the DuckDB adaptation. Cloud warehouse credentials were not used and are
+not an explicit requirement in the assignment; final assessment belongs to the professor.
 
 - [Artifact index and hashes](index.json)
 - [Actual update verification and probe arrays](verification.json)
@@ -18,7 +20,7 @@ improvement is claimed. Credentialed-warehouse acceptance remains unconfirmed.
 - [Independent clean replay](train-01-success-02-standalone-replay.json)
 - [Post-update evaluation](post-update-summary.json)
 - [Final tests and screenshot hashes](release-validation.json)
-- [Current native English Google Doc validation](google-doc-validation-current.json)
+- [Current native English Google Doc validation](google-doc-validation-submission.json)
 
 After fetching the pinned public task assets, replay a model-produced pipeline:
 

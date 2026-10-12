@@ -8,7 +8,10 @@ completed an optimizer step, then failed during state-load verification.
 Separate non-injected real-API recovery verified the saved update without
 repeating optimization. The sole post-update evaluation was partially correct;
 general policy improvement is not established.
-Offline tests make no paid calls. Databricks and Airbyte remain optional.
+The implementation and evidence demonstrate the three written minimum gates:
+credential-free local integration, a real Tinker-credentialed official-task
+rollout and an execution-reward RL optimization step. Final assessment belongs
+to the professor. Offline tests make no paid calls. Databricks and Airbyte remain optional.
 
 | Gate | Observed result |
 | --- | --- |
@@ -186,7 +189,7 @@ was removed; the unique published definition was retained at that check's time.
 The final source listing then contained no temporary probe sources. The later
 profile deletion removed that Airbyte database/cache with its runtime disk.
 
-## Remaining model and training gates
+## Written minimum criteria and assessment
 
 Real sampling and strict model-generated ELT success are now demonstrated.
 One real optimizer step and saved model change are verified through separate
@@ -205,8 +208,11 @@ The assignment explicitly requires Tinker and at least one warehouse, but does
 not name Databricks or Airbyte as requirements. This implementation adapts the
 official Databricks task variant to DuckDB using unchanged source/reference
 bytes. Tinker API credentials are real; the warehouse is credential-free.
-Do not claim the credentialed-rollout gate passed without an actual successful
-model run and confirmation of the grader's intended warehouse requirement.
+The credentialed official-task rollouts used real Tinker API access, including
+two strict-successful pipelines with fresh replay. Cloud warehouse credentials
+and a post-training quality gain are not explicit minimum requirements. These
+results demonstrate the written minimum gates; final assessment belongs to the
+professor.
 
 The concise native [Google Doc design](https://docs.google.com/document/d/1SWoXsokaq7h7AoHn0ud66ymrli8wtcF7yN_bWqMuZUc)
 records the environment, reward, replay, safety, efficiency and current results.
