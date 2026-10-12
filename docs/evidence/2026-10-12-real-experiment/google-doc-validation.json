@@ -1,0 +1,26 @@
+{
+  "document_url": "https://docs.google.com/document/d/1SWoXsokaq7h7AoHn0ud66ymrli8wtcF7yN_bWqMuZUc",
+  "title": "ELT-Bench RLVR: Implementation Design and Validation",
+  "native_headings": [
+    "Objective and Current Status",
+    "Environment and Tools",
+    "Reward, Submission, and Replay",
+    "Reward Hacking and Efficiency",
+    "Training and Validation Evidence",
+    "Code and Run Instructions"
+  ],
+  "original_links_preserved": [
+    "https://github.com/whatareyoubarkingat/elt-bench-rl",
+    "https://github.com/whatareyoubarkingat/elt-bench-rl/blob/main/docs/running.md",
+    "https://github.com/uiuc-kang-lab/ELT-Bench",
+    "https://tinker-docs.thinkingmachines.ai/cookbook/rl/"
+  ],
+  "body_matches_report": true,
+  "comparison": "Markdown outcome table converted to separate native paragraphs; whitespace normalized.",
+  "cjk_characters": 0,
+  "verified_tests": 262,
+  "real_saved_update_verified": true,
+  "post_update_reward": 0.6285714285714286,
+  "estimated_token_cost_usd": 0.448166396,
+  "sharing_permissions_changed": false
+}

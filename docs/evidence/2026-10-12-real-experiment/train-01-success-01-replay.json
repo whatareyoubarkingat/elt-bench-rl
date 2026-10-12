@@ -1,0 +1,61 @@
+{
+  "strict": true,
+  "loading": 1.0,
+  "target": 1.0,
+  "official_stage1": true,
+  "official_stage2": true,
+  "comparison_counts": {
+    "sources": {
+      "train": {
+        "matched_cells": 40,
+        "total_cells": 40,
+        "actual_rows": 20,
+        "expected_rows": 20,
+        "actual_columns": 2,
+        "expected_columns": 2,
+        "missing_rows": 0,
+        "extra_rows": 0,
+        "missing_columns": 0,
+        "extra_columns": 0,
+        "actual_duplicate_key_rows": 0,
+        "expected_duplicate_key_rows": 0,
+        "actual_invalid_key_rows": 0,
+        "expected_invalid_key_rows": 0
+      },
+      "cars": {
+        "matched_cells": 630,
+        "total_cells": 630,
+        "actual_rows": 63,
+        "expected_rows": 63,
+        "actual_columns": 10,
+        "expected_columns": 10,
+        "missing_rows": 0,
+        "extra_rows": 0,
+        "missing_columns": 0,
+        "extra_columns": 0,
+        "actual_duplicate_key_rows": 0,
+        "expected_duplicate_key_rows": 0,
+        "actual_invalid_key_rows": 0,
+        "expected_invalid_key_rows": 0
+      }
+    },
+    "targets": {
+      "trains": {
+        "matched_cells": 140,
+        "total_cells": 140,
+        "actual_rows": 20,
+        "expected_rows": 20,
+        "actual_columns": 7,
+        "expected_columns": 7,
+        "missing_rows": 0,
+        "extra_rows": 0,
+        "missing_columns": 0,
+        "extra_columns": 0,
+        "actual_duplicate_key_rows": 0,
+        "expected_duplicate_key_rows": 0,
+        "actual_invalid_key_rows": 0,
+        "expected_invalid_key_rows": 0
+      }
+    }
+  }
+}

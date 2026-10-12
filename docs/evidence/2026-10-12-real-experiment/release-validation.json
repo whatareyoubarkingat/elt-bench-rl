@@ -1,0 +1,50 @@
+{
+  "source_revision": "cab00c18e677d406d0109f53fb4211d326408d1d",
+  "tests": {
+    "passed": 262,
+    "elapsed_seconds": 47.36,
+    "paid_calls": false
+  },
+  "focused_training_tests": {
+    "passed": 35,
+    "elapsed_seconds": 3.91,
+    "overlap_with_full_suite": true
+  },
+  "lint_and_format": {
+    "scope": "src, tests, active experiment scripts",
+    "files": 39,
+    "passed": true
+  },
+  "actual_probe_provenance_local_recheck": {
+    "validation": "local_probe_provenance_only",
+    "paid_calls": false,
+    "same_probe_sequence": true,
+    "same_predecessor": true,
+    "same_updated_state": true,
+    "all_original_hashes_unchanged": true,
+    "prompt_tokens": 6206,
+    "action_tokens": 814,
+    "original_group_step": 0,
+    "original_checkpoint_step": 1
+  },
+  "screenshots": [
+    {
+      "file": "rollout-01-recorded-failure.jpg",
+      "bytes": 35488,
+      "sha256": "65b51546a77da1e514eeedada38b9661cbbe1a296510eb86656b78b8b91932db",
+      "caption": "Actual browser screenshot of locally rendered experiment records, not the Tinker console or an invoice."
+    },
+    {
+      "file": "strict-success-optimizer-before-reload-verification.jpg",
+      "bytes": 16588,
+      "sha256": "9254433dc22b6f4e022f22f6c14a1fae357c524b78f8b8e2055cfbfc2e56219e",
+      "caption": "Actual browser screenshot of locally rendered experiment records, not the Tinker console or an invoice."
+    },
+    {
+      "file": "verified-rl-update.jpg",
+      "bytes": 10299,
+      "sha256": "385d0225cc92148de78379732db8e955388c1412476e902213b0ab06a16892f6",
+      "caption": "Actual browser screenshot of locally rendered experiment records, not the Tinker console or an invoice."
+    }
+  ]
+}

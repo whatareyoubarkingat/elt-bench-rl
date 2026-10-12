@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "task_id": "trains",
+  "benchmark_revision": "fcf3129df49ce5ce63ff46b2bbbbba1eaf9ec055",
+  "loads": [
+    {
+      "source": "cars",
+      "mode": "replace"
+    },
+    {
+      "source": "train",
+      "mode": "replace"
+    }
+  ],
+  "dbt_project": {
+    "name": "elt_pipeline",
+    "materialized": "table"
+  },
+  "models": {
+    "trains": "SELECT \n    t.id AS train_id,\n    t.direction,\n    CASE \n        WHEN t.direction = 'east' AND COALESCE(tr.car_count, 0) < 4 \n        THEN 1 \n        ELSE 0 \n    END AS run_east_and_has_less_than_4_cars,\n    CASE \n        WHEN COALESCE(tr.long_car_count, 0) > 2 \n        THEN 1 \n        ELSE 0 \n    END AS has_more_than_2_long_cars,\n    CASE \n        WHEN EXISTS (SELECT 1 FROM raw.cars c \n                     WHERE c.train_id = t.id \n                     AND c.position = 3 \n                     AND c.sides = 'double') \n        THEN 1 \n        ELSE 0 \n    END AS has_double_sided_cars_in_3rd_position,\n    CASE \n        WHEN EXISTS (SELECT 1 FROM raw.cars c \n                     WHERE c.train_id = t.id \n                     AND c.position = 1 \n                     AND c.shape = 'rectangle') \n        THEN 1 \n        ELSE 0 \n    END AS has_rectangular_shaped_head_cars,\n    COALESCE(COUNT(CASE WHEN c.roof = 'none' THEN 1 ELSE NULL END), 0) AS number_of_open_roof_car\nFROM raw.train t\nLEFT JOIN (\n    SELECT \n        train_id,\n        COUNT(*) AS car_count,\n        SUM(CASE WHEN len = 'long' THEN 1 ELSE 0 END) AS long_car_count\n    FROM raw.cars\n    GROUP BY train_id\n) tr ON tr.train_id = t.id\nLEFT JOIN raw.cars c ON c.train_id = t.id\nGROUP BY t.id, t.direction, tr.car_count, tr.long_car_count\nORDER BY t.id"
+  }
+}

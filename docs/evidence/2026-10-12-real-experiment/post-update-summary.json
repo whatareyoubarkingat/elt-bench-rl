@@ -1,0 +1,25 @@
+{
+  "source_revision": "329249cdd9b111c65dab47dcb5c5d520d315036e",
+  "configuration": {
+    "model_name": "Qwen/Qwen3.5-4B",
+    "group_size": 1,
+    "temperature": 0.6,
+    "max_turns": 32,
+    "max_sampled_tokens": 8192,
+    "max_turn_tokens": 2048,
+    "max_context_tokens": 32768,
+    "sampler_checkpoint_path": "tinker://9f59be47-b61b-55f4-a794-8dd49965c3c0:train:0/sampler_weights/step-1"
+  },
+  "episodes": 1,
+  "turns": 13,
+  "action_tokens": 2079,
+  "rewards": [
+    0.6285714285714286
+  ],
+  "stop_reasons": [
+    "tool_stopped"
+  ],
+  "injected_runtime": false,
+  "improvement_claim": false,
+  "interpretation": "One post-update sample remains partially correct; no aggregate improvement is established."
+}

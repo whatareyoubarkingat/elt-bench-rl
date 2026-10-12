@@ -1,0 +1,73 @@
+{
+  "strict": true,
+  "loading": 1.0,
+  "target": 1.0,
+  "official_stage1": true,
+  "official_stage2": true,
+  "comparison_counts": {
+    "sources": {
+      "train": {
+        "matched_cells": 40,
+        "total_cells": 40,
+        "actual_rows": 20,
+        "expected_rows": 20,
+        "actual_columns": 2,
+        "expected_columns": 2,
+        "missing_rows": 0,
+        "extra_rows": 0,
+        "missing_columns": 0,
+        "extra_columns": 0,
+        "actual_duplicate_key_rows": 0,
+        "expected_duplicate_key_rows": 0,
+        "actual_invalid_key_rows": 0,
+        "expected_invalid_key_rows": 0
+      },
+      "cars": {
+        "matched_cells": 630,
+        "total_cells": 630,
+        "actual_rows": 63,
+        "expected_rows": 63,
+        "actual_columns": 10,
+        "expected_columns": 10,
+        "missing_rows": 0,
+        "extra_rows": 0,
+        "missing_columns": 0,
+        "extra_columns": 0,
+        "actual_duplicate_key_rows": 0,
+        "expected_duplicate_key_rows": 0,
+        "actual_invalid_key_rows": 0,
+        "expected_invalid_key_rows": 0
+      }
+    },
+    "targets": {
+      "trains": {
+        "matched_cells": 140,
+        "total_cells": 140,
+        "actual_rows": 20,
+        "expected_rows": 20,
+        "actual_columns": 7,
+        "expected_columns": 7,
+        "missing_rows": 0,
+        "extra_rows": 0,
+        "missing_columns": 0,
+        "extra_columns": 0,
+        "actual_duplicate_key_rows": 0,
+        "expected_duplicate_key_rows": 0,
+        "actual_invalid_key_rows": 0,
+        "expected_invalid_key_rows": 0
+      }
+    }
+  },
+  "provenance": {
+    "operation": "standalone CLI replay in a separate process",
+    "warehouse": "fresh local DuckDB",
+    "source_transport": "fresh local HTTP source",
+    "root_verified_command_exit_code": 0,
+    "input_pipeline_artifact": "train-01-success-02-pipeline.json",
+    "input_pipeline_file_sha256": "b0f5279d624acb086e6ee0b42cf6c182be697453e7bc20e8423915938a74215c",
+    "input_pipeline_canonical_sha256": "3fde4ff687b51525025e96607794ee086b9ca405516d48244531c066f7a5b55d",
+    "original_fresh_grade_file_sha256": "440b7b63aaa7836692be984ebb67511d7d232b49fd637e72ec2b0f12af882a3c",
+    "model_api_calls": 0,
+    "credentialed_warehouse": false
+  }
+}

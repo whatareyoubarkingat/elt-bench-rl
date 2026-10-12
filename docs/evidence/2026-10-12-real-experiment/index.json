@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-12",
+  "task_id": "trains",
+  "warehouse": "local DuckDB",
+  "real_tinker_calls": true,
+  "injected_runtime": false,
+  "original_training_source_revision": "b5ea9cf405631c47d09770bb1b534fe465280617",
+  "recovery_and_post_update_source_revision": "329249cdd9b111c65dab47dcb5c5d520d315036e",
+  "original_run_status_preserved": "failed at checkpoint reload",
+  "independently_verified_saved_update": true,
+  "optimizer_repeated_during_recovery": false,
+  "verified_checkpoint_load_into_new_model": true,
+  "probe_action_tokens": 814,
+  "probe_max_abs_logprob_delta": 0.19415616989135742,
+  "training_group_rewards": [
+    0.6285714285714286,
+    1.0,
+    0.0,
+    1.0
+  ],
+  "successful_pipeline_artifacts": [
+    "train-01-success-01-pipeline.json",
+    "train-01-success-02-pipeline.json"
+  ],
+  "standalone_replay_artifact": "train-01-success-02-standalone-replay.json",
+  "verification_artifact": "verification.json",
+  "action_record_artifact": "train-01-actions.json",
+  "checkpoint_metadata_artifact": "checkpoint-metadata.json",
+  "post_update_summary_artifact": "post-update-summary.json",
+  "post_update_reward": 0.6285714285714286,
+  "post_update_improvement_claim": false,
+  "credentialed_warehouse_rollout": "not run",
+  "cost_estimate": {
+    "token_cost_usd_including_prior_check": 0.4481663960000003,
+    "storage_buffer_usd": 0.5,
+    "total_accounted_and_reserved_usd": 0.9481663960000003,
+    "estimate_not_invoice": true
+  },
+  "sanitization": "No prompts, observations, tool-result rows, reference data, credentials, local absolute paths or physical warehouse schemas are included. Model-generated actions and logical submitted SQL are retained. Original train-01 metrics describe the failed run; verification.json records the separate successful recovery.",
+  "artifacts": [
+    {
+      "file": "README.md",
+      "bytes": 2201,
+      "sha256": "00432a9d1c9f6217d762d2cb6621a03fdaddd9517a62aed36508274b7985c49a"
+    },
+    {
+      "file": "checkpoint-metadata.json",
+      "bytes": 981,
+      "sha256": "28714798629ff540a2f216e2fb104fee53d7f7e4519fc3875b3afe8e478e9fc9"
+    },
+    {
+      "file": "google-doc-validation.json",
+      "bytes": 1051,
+      "sha256": "6eb36f7f658a4dc14589625158c53e1007d008e8b9a1797ca2ccbfa4107d4697"
+    },
+    {
+      "file": "post-update-grade.json",
+      "bytes": 1639,
+      "sha256": "d62d5a7e99afd55dcb08eb83f9c7e970bd637363e92d48f0104de43f781150b1"
+    },
+    {
+      "file": "post-update-pipeline.json",
+      "bytes": 1571,
+      "sha256": "0efb1c00cb2405c8adb93038274f86c960773271055decff0fcadcb7cea00d44"
+    },
+    {
+      "file": "post-update-replay.json",
+      "bytes": 1609,
+      "sha256": "3a90a5fbd00844db354a9d348af0c03b510316c4c790515186a177b9d444c23e"
+    },
+    {
+      "file": "post-update-summary.json",
+      "bytes": 718,
+      "sha256": "5ec40e8813141f451d9f1ccf44ad5ed080276245b3f587fc6a05f1e084b0d0d0"
+    },
+    {
+      "file": "release-validation.json",
+      "bytes": 1685,
+      "sha256": "964bb95b69cee0fce68fd7ecea875e392a814f7b3bbc0e969f82cde6748a9454"
+    },
+    {
+      "file": "rollout-01-recorded-failure.jpg",
+      "bytes": 35488,
+      "sha256": "65b51546a77da1e514eeedada38b9661cbbe1a296510eb86656b78b8b91932db"
+    },
+    {
+      "file": "strict-success-optimizer-before-reload-verification.jpg",
+      "bytes": 16588,
+      "sha256": "9254433dc22b6f4e022f22f6c14a1fae357c524b78f8b8e2055cfbfc2e56219e"
+    },
+    {
+      "file": "train-01-actions.json",
+      "bytes": 396508,
+      "sha256": "460ee697311fe9e8d95b3baa05b3714702453ea78f5ee2700b53535d0e3ebc98"
+    },
+    {
+      "file": "train-01-metrics-summary.json",
+      "bytes": 3638,
+      "sha256": "b1bc1128e05a9e0c385512f32d07dead13f8e1ce99cc2f35185fee52d86e6417"
+    },
+    {
+      "file": "train-01-success-01-grade.json",
+      "bytes": 1748,
+      "sha256": "1292ed9241a47eea2851fef9f8fb0d3d8a220cc0d062ac61bf64b3f397ef40ce"
+    },
+    {
+      "file": "train-01-success-01-pipeline.json",
+      "bytes": 1724,
+      "sha256": "ed7be1e89a1200250190b401b5ba477ada61779d6d5ddda3e326c89fe1ef7c95"
+    },
+    {
+      "file": "train-01-success-01-replay.json",
+      "bytes": 1592,
+      "sha256": "5fa876804cc03eebe3170a16808e3918d6a036e569708ae6de3d602c027827bf"
+    },
+    {
+      "file": "train-01-success-02-grade.json",
+      "bytes": 1748,
+      "sha256": "1292ed9241a47eea2851fef9f8fb0d3d8a220cc0d062ac61bf64b3f397ef40ce"
+    },
+    {
+      "file": "train-01-success-02-pipeline.json",
+      "bytes": 1667,
+      "sha256": "b0f5279d624acb086e6ee0b42cf6c182be697453e7bc20e8423915938a74215c"
+    },
+    {
+      "file": "train-01-success-02-replay.json",
+      "bytes": 1592,
+      "sha256": "5fa876804cc03eebe3170a16808e3918d6a036e569708ae6de3d602c027827bf"
+    },
+    {
+      "file": "train-01-success-02-standalone-replay.json",
+      "bytes": 2258,
+      "sha256": "b26c0001da515d179fb719804cd7997b46b98ea622856267daa014b3303d50ed"
+    },
+    {
+      "file": "verification.json",
+      "bytes": 47614,
+      "sha256": "1624a92a3ba18e1228bcba749bf24a0aa94e463c31e173342c33c80c29743d8f"
+    },
+    {
+      "file": "verified-rl-update.jpg",
+      "bytes": 10299,
+      "sha256": "385d0225cc92148de78379732db8e955388c1412476e902213b0ab06a16892f6"
+    }
+  ],
+  "final_implementation_source_revision": "cab00c18e677d406d0109f53fb4211d326408d1d",
+  "final_validation_artifact": "release-validation.json",
+  "google_doc_validation_artifact": "google-doc-validation.json",
+  "experiment_processes": "exited",
+  "heartbeat_monitor": "PAUSED"
+}

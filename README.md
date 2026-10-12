@@ -34,8 +34,21 @@ credentialed official rollout.
 | Different execution rewards for correct and incorrect pipelines | Passed: 1.0 vs 0.628571 |
 | Cookbook environment, reward and optimizer integration | Offline tests passed; injected clients are labeled |
 | Real Tinker credential check | Passed: `KEY_OK`, 18 input tokens and 3 output tokens; access only |
-| Model-generated rollout on the official `trains` task adapted to DuckDB | Formal experiment authorized; results pending |
-| Real Tinker optimization with nonzero advantages and model change | Formal experiment authorized; results pending |
+| Model-generated rollout on the official `trains` task adapted to DuckDB | Two real training rollouts earned 1.0 with strict fresh replay |
+| Real Tinker optimization with nonzero advantages and model change | Passed: one actual optimizer step, fresh checkpoint restore and changed fixed-token logprobs |
+
+The first three standalone rollouts scored 0, 0 and 0.6285714286; the training
+group scored [0.6285714286, 1, 0, 1]. Training completed its optimizer step,
+then exited during same-client `LoadWeights` verification at sequence 7.
+Separate real-API recovery verified the saved update through a fresh model
+with optimizer-state restoration, without repeating optimization. On 814 fixed
+action tokens, the maximum logprob change was 0.19415616989135742, above 1e-8.
+The original failed run remains recorded separately. The sole post-update
+evaluation submitted at 13 turns/2079 generated tokens with reward
+0.6285714286 (L=1, T=6/7, R=0); general quality improvement is not established.
+See [sanitized real-experiment evidence](docs/evidence/2026-10-12-real-experiment).
+Final validation: 262 full-suite tests (47.36s), 35 focused training tests
+(3.91s), and 39 files checked by Ruff/format. Test counts overlap.
 
 See the [concise English report](docs/report.md), [design](docs/design.md), [run commands](docs/running.md),
 [setup](docs/setup.md), and [validation boundaries](docs/acceptance.md).
@@ -79,6 +92,11 @@ the estimate. The $10 limit includes a $0.50 storage buffer and $0.000008955
 estimated prior key-check cost. These are uncached rate-card estimates, not an
 invoice or an account-level spending cap. Checkpoints currently have no TTL;
 their ongoing provider storage is billed separately from token reservations.
+Recorded checkpoint metadata lists four files totaling 1,167,002,514 bytes with
+no TTL, approximately $0.1167/month at the published $0.10/GB/month rate.
+The final uncached token estimate is $0.448166396; including the fixed storage
+buffer, the ledger accounts for $0.948166396. These are not invoice amounts;
+ongoing storage billing remains separate.
 See [budget and checkpoint details](docs/running.md#shared-budget-and-checkpoint-storage).
 
 The recipe reuses Cookbook rollouts, trajectory assembly, assistant token masks,
@@ -125,5 +143,8 @@ source checkouts live under `~/.cache/elt-bench-rl/upstreams` (override with
 repository. Cookbook is installed from its exact Git revision through `uv`.
 The [assignment](https://docs.google.com/document/d/1Rr9Y7wG93Fw-vEHgGMuALsIKZMyXO5zRPhlo4NtvrzQ/edit)
 requires a real credentialed rollout and a real RL update. The successful key
-check establishes access; formal experiment outcomes remain pending until
-execution and model-update evidence have been reviewed.
+check establishes access, and two model-generated pipelines now pass strict
+execution/replay checks. One real RL update is verified. The single post-update
+evaluation was partially correct; this does not establish general improvement.
+Grader acceptance of the adapted warehouse remains unconfirmed, so the entire
+assignment is not declared accepted.

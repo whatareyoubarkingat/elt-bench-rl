@@ -1,0 +1,107 @@
+{
+  "rewards": [
+    0.6285714285714286,
+    1.0,
+    0.0,
+    1.0
+  ],
+  "reward_variance": 0.16693877551020408,
+  "advantages": [
+    -0.02857142686843872,
+    0.34285712242126465,
+    -0.6571428775787354,
+    0.34285712242126465
+  ],
+  "effective_action_tokens": 11981.0,
+  "absolute_effective_advantage": 4596.799667358398,
+  "source_revision": "b5ea9cf405631c47d09770bb1b534fe465280617",
+  "model_name": "Qwen/Qwen3.5-4B",
+  "destination": "duckdb",
+  "injected_runtime": false,
+  "renderer_name": "qwen3_5_disable_thinking",
+  "trajectories": [
+    {
+      "index": 0,
+      "stop_reason": "tool_stopped",
+      "turns": 24,
+      "action_tokens": 2448,
+      "parse_error_masked_turns": 0,
+      "terminal_reward": 0.6285714285714286,
+      "group_boundary_reward": 0.0,
+      "initial_prompt_contains_gt_path": false,
+      "initial_prompt_contains_example_solution_path": false
+    },
+    {
+      "index": 1,
+      "stop_reason": "tool_stopped",
+      "turns": 22,
+      "action_tokens": 2567,
+      "parse_error_masked_turns": 0,
+      "terminal_reward": 1.0,
+      "group_boundary_reward": 0.0,
+      "initial_prompt_contains_gt_path": false,
+      "initial_prompt_contains_example_solution_path": false
+    },
+    {
+      "index": 2,
+      "stop_reason": "max_turns",
+      "turns": 32,
+      "action_tokens": 4004,
+      "parse_error_masked_turns": 0,
+      "terminal_reward": 0.0,
+      "group_boundary_reward": 0.0,
+      "initial_prompt_contains_gt_path": false,
+      "initial_prompt_contains_example_solution_path": false
+    },
+    {
+      "index": 3,
+      "stop_reason": "tool_stopped",
+      "turns": 29,
+      "action_tokens": 2962,
+      "parse_error_masked_turns": 0,
+      "terminal_reward": 1.0,
+      "group_boundary_reward": 0.0,
+      "initial_prompt_contains_gt_path": false,
+      "initial_prompt_contains_example_solution_path": false
+    }
+  ],
+  "strict_success_artifacts": [
+    {
+      "artifact_prefix": "train-01-success-01",
+      "trajectory_index": 1,
+      "pipeline_file_sha256": "ed7be1e89a1200250190b401b5ba477ada61779d6d5ddda3e326c89fe1ef7c95",
+      "tool_calls": 29,
+      "run_dbt_attempts": 1,
+      "successful_run_dbt": 1,
+      "loaders": [
+        "local_csv_http"
+      ],
+      "model_generated_sql_present_in_initial_prompt": false
+    },
+    {
+      "artifact_prefix": "train-01-success-02",
+      "trajectory_index": 3,
+      "pipeline_file_sha256": "b0f5279d624acb086e6ee0b42cf6c182be697453e7bc20e8423915938a74215c",
+      "tool_calls": 29,
+      "run_dbt_attempts": 2,
+      "successful_run_dbt": 1,
+      "loaders": [
+        "local_csv_http"
+      ],
+      "model_generated_sql_present_in_initial_prompt": false
+    }
+  ],
+  "all_sampled_logprobs_finite": true,
+  "action_and_logprob_lengths_match": true,
+  "mask_evidence": "All retained parse_error_masked flags are zero; action-token totals equal effective_action_tokens. Prompt tokens have zero loss mask under the pinned Cookbook data-processing code.",
+  "forward_backward_completed": true,
+  "optimizer_completed": true,
+  "initial_checkpoint_saved": true,
+  "updated_checkpoint_saved": true,
+  "before_and_after_probe_calls_completed": true,
+  "probe_values_and_delta_persisted": false,
+  "retained_run_status": "failed_at_state_load_verify",
+  "failure_type": "BadRequestError",
+  "session_close_completed": true,
+  "acceptance_boundary": "Real model sampling, execution-derived reward diversity, forward-backward and optimizer completion are recorded. This run does not establish checkpoint reload or an independently auditable pre/post logprob delta. It uses local DuckDB rather than a credentialed warehouse."
+}

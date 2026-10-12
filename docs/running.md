@@ -34,8 +34,13 @@ uv run --locked elt-rl rollout --destination duckdb --allow-paid \
 ```
 
 The minimal real Tinker credential check returned `KEY_OK` with 18 input tokens
-and 3 output tokens. It confirms sampling access only. Formal rollout and
-optimization results are pending. DuckDB `preflight --online` checks the local
+and 3 output tokens. Three standalone model rollouts scored 0, 0 and
+0.6285714286; the real training group subsequently produced two strict-correct
+pipelines with fresh replay and reward 1. The optimizer response was awaited
+with nonzero effective advantages. Separate real-API recovery verified the
+saved update through fresh optimizer-state restoration and changed fixed-token
+logprobs. The sole post-update evaluation scored 0.6285714286 after submission,
+so general quality improvement is not established. DuckDB `preflight --online` checks the local
 warehouse and credential presence; it does not itself authenticate with Tinker.
 
 Sampling uses real Tinker credentials; extraction/loading, dbt execution and
@@ -113,6 +118,41 @@ To resume, add `load_checkpoint_path: tinker://...` to a training YAML. To
 evaluate a trained policy, add `sampler_checkpoint_path: tinker://...` to a
 rollout YAML and pass `--config`; state and sampler paths have different roles.
 
+### Recover post-update verification without another optimizer step
+
+Training 01 used group rewards [0.6285714286, 1, 0, 1], nonzero advantages and
+11981 effective action tokens. Its optimizer completed, but the process exited
+1 when same-client `LoadWeights` at sequence 7 returned HTTP 400
+(`LoadWeights not permitted`). The SDK/service does not permit that load on
+the already advanced training model. Verification now creates a fresh model
+from the saved state with optimizer state and compares the saved initial/updated
+checkpoints; it does not rerun rollouts or optimization.
+
+```bash
+RUN_ROOT=runs/real-experiment-20261012
+.venv/bin/python scripts/verify_saved_update.py \
+  --training-run "$RUN_ROOT/train-01" \
+  --output "$RUN_ROOT/checkpoint-verification" --allow-paid \
+  --budget-ledger "$RUN_ROOT/budget.json" --max-cost-usd 10
+```
+
+Recovery makes real checkpoint/probe calls and must share the experiment ledger.
+The original failed `train-01` manifest stays unchanged; verification writes
+separate evidence. Recovery completed with `verified_saved_update`,
+`injected_runtime=false`, verified optimizer-state restoration, and maximum
+absolute logprob delta 0.19415616989135742 on 814 fixed action tokens
+(tolerance 1e-8). The recovery watchdog completed in 40.164 seconds; no optimizer
+was repeated. This verifies the already completed real update while preserving
+the original post-update failure.
+
+The single updated-sampler evaluation used the unchanged public task,
+temperature 0.6, a 32-turn cap and 8192 cumulative sampled-token cap. It submitted
+at 13 turns/2079 generated tokens, with reward 0.6285714286, L=1, T=6/7, R=0,
+Stage 1=true and Stage 2=false; fresh replay remained partially correct. Its
+watchdog completed in 105.377 seconds. It was not rerun or used for another
+optimizer step. This one sample establishes neither general improvement nor
+degradation. See [sanitized real-experiment evidence](evidence/2026-10-12-real-experiment).
+
 ## Shared budget and checkpoint storage
 
 Pass the same `--budget-ledger` path and `--max-cost-usd 10` to every sampling,
@@ -144,6 +184,16 @@ charges. Local process exit and warehouse cleanup do not delete remote
 checkpoints. Review actual storage and retention separately, keeping the
 evaluation checkpoints needed for evidence. The recipe applies no automatic
 TTL or checkpoint deletion. See [Tinker checkpoint management](https://tinker-docs.thinkingmachines.ai/tinker/howto/checkpoints/).
+
+The experiment's recorded remote metadata lists four files totaling
+1,167,002,514 bytes, all with no TTL. Using decimal GB at the published rate,
+projected storage is approximately $0.1167/month. This is ongoing storage,
+not another token charge or a measured invoice. After all baseline/training,
+verification and post-update evaluation calls, the uncached token estimate is
+$0.448166396, including the initial key check. The final ledger total is
+$0.948166396 including the $0.50 buffer, within the shared $10 estimate limit.
+These amounts are not an invoice or account-level spending cap. All paid
+experiment processes have exited; stored checkpoints remain billable.
 
 ## Watchdog and progress evidence
 
@@ -191,6 +241,11 @@ proxy variables before launch while preserving HTTP(S) proxy and `NO_PROXY`
 settings. It does not change system proxy configuration. Local source HTTP
 requests bypass inherited proxies. Keep proxy credentials in local configuration,
 not command arguments or screenshots.
+
+Final validation: 262 full-suite tests passed in 47.36 seconds, 35 focused
+training tests passed in 3.91 seconds, and Ruff/format checked 39 files. Test
+counts overlap. Offline provenance hardening reproduced the same 6206-token
+probe prompt, 814 action tokens and checkpoint pair, with six unchanged hashes.
 
 Offline tests use synthetic sources and injected model/optimizer clients. They
 make no paid Tinker calls and do not establish credentialed experiment results.

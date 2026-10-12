@@ -132,6 +132,10 @@ actual remote storage billing continues while they are retained. The fixed
 buffer neither measures storage nor caps its later charges. The recipe does not
 delete these evaluation artifacts automatically. Retention and provider billing
 require separate review; see [checkpoint management](https://tinker-docs.thinkingmachines.ai/tinker/howto/checkpoints/).
+Recorded remote metadata contains four checkpoint files totaling 1,167,002,514
+bytes, with no expiration. At $0.10/GB/month, projected storage is approximately
+$0.1167/month. The final token estimate is $0.448166396 ($0.948166396 including the
+fixed storage buffer); these estimates are not an invoice.
 
 `DurableProgress` flushes turn and remote-phase events to `progress.jsonl`.
 Remote waits are bounded. The separate local watchdog observes manifest/status
@@ -144,8 +148,21 @@ reward or optimizer update. HTTP proxy fallback changes only child/process
 environment; it does not modify global settings.
 
 The minimal real Tinker key check returned `KEY_OK` (18 input, 3 output tokens).
-This confirms sampling access. Formal rollout and optimization outcomes remain
-pending; offline tests make no paid calls.
+Three standalone rollouts scored 0, 0 and 0.6285714286. The real training group
+scored [0.6285714286, 1, 0, 1], including two strict-successful pipelines and
+fresh replay. Nonzero advantages and 11981 effective action tokens drove an
+awaited optimizer step. The original run then failed at same-client
+`LoadWeights` verification (sequence 7). Separate real-API recovery restored
+optimizer state into a fresh model and verified the saved update: 814 fixed
+action tokens, maximum absolute logprob delta 0.19415616989135742 versus
+tolerance 1e-8. Both original/recovery runtimes are non-injected. Optimization
+was not repeated and the original failed manifest was preserved. The sole
+post-update evaluation submitted at 13 turns with 2079 generated tokens and
+reward 0.6285714286 (L=1, T=6/7, R=0); Stage 1 passed, Stage 2 failed. This
+single partial outcome does not establish general quality improvement.
+Latest full validation: 262 full-suite tests passed in 47.36s; 35 focused training tests passed in 3.91s; Ruff/format checked 39 files. Test counts overlap.
+See [sanitized experiment evidence](evidence/2026-10-12-real-experiment).
+Offline tests make no paid calls.
 
 Offline mocks do not prove real model sampling or training. A scripted DuckDB
 pipeline does not prove a model-generated official-task rollout. The current

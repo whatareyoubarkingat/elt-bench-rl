@@ -1,0 +1,34 @@
+{
+  "status": "metadata_verified",
+  "total_size_bytes": 1167002514,
+  "estimated_storage_usd_per_month": 0.11670025140000001,
+  "storage_rate_source": "https://tinker-docs.thinkingmachines.ai/tinker/models/models_and_pricing/",
+  "estimate_not_invoice": true,
+  "checkpoints": [
+    {
+      "checkpoint_id": "weights/initial",
+      "checkpoint_type": "training",
+      "size_bytes": 437565045,
+      "expires_at": null
+    },
+    {
+      "checkpoint_id": "sampler_weights/initial",
+      "checkpoint_type": "sampler",
+      "size_bytes": 145936212,
+      "expires_at": null
+    },
+    {
+      "checkpoint_id": "weights/step-1",
+      "checkpoint_type": "training",
+      "size_bytes": 437565045,
+      "expires_at": null
+    },
+    {
+      "checkpoint_id": "sampler_weights/step-1",
+      "checkpoint_type": "sampler",
+      "size_bytes": 145936212,
+      "expires_at": null
+    }
+  ],
+  "source_file_sha256": "86ecb183061f4dd2c927dc9c95630988645238e9ac88ae5f2ea7259b46d7eff5"
+}
