@@ -18,7 +18,7 @@ improvement is claimed. Credentialed-warehouse acceptance remains unconfirmed.
 - [Independent clean replay](train-01-success-02-standalone-replay.json)
 - [Post-update evaluation](post-update-summary.json)
 - [Final tests and screenshot hashes](release-validation.json)
-- [Native English Google Doc validation](google-doc-validation.json)
+- [Current native English Google Doc validation](google-doc-validation-current.json)
 
 After fetching the pinned public task assets, replay a model-produced pipeline:
 

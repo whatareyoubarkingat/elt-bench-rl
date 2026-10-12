@@ -41,13 +41,18 @@
   "artifacts": [
     {
       "file": "README.md",
-      "bytes": 2201,
-      "sha256": "00432a9d1c9f6217d762d2cb6621a03fdaddd9517a62aed36508274b7985c49a"
+      "bytes": 2217,
+      "sha256": "4b3e3ea7866d35d048158dc93116cc67e76ef8cd9e0613cde07787fefe1773a0"
     },
     {
       "file": "checkpoint-metadata.json",
       "bytes": 981,
       "sha256": "28714798629ff540a2f216e2fb104fee53d7f7e4519fc3875b3afe8e478e9fc9"
+    },
+    {
+      "file": "google-doc-validation-current.json",
+      "bytes": 685,
+      "sha256": "231c7c669124c0dc56e1de394124df78717d3e235af81a977e3689317bc5bbc7"
     },
     {
       "file": "google-doc-validation.json",
@@ -147,7 +152,8 @@
   ],
   "final_implementation_source_revision": "cab00c18e677d406d0109f53fb4211d326408d1d",
   "final_validation_artifact": "release-validation.json",
-  "google_doc_validation_artifact": "google-doc-validation.json",
+  "google_doc_validation_artifact": "google-doc-validation-current.json",
   "experiment_processes": "exited",
-  "heartbeat_monitor": "PAUSED"
+  "heartbeat_monitor": "PAUSED",
+  "historical_google_doc_validation_artifact": "google-doc-validation.json"
 }

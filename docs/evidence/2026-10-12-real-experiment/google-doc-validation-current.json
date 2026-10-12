@@ -1,0 +1,19 @@
+{
+  "document_url": "https://docs.google.com/document/d/1SWoXsokaq7h7AoHn0ud66ymrli8wtcF7yN_bWqMuZUc",
+  "title": "ELT-Bench RLVR: Implementation Design and Validation",
+  "native_headings": [
+    "Objective and Current Status",
+    "Environment and Tools",
+    "Reward, Submission, and Replay",
+    "Reward Hacking and Efficiency",
+    "Training and Validation Evidence"
+  ],
+  "remaining_hyperlinks": [],
+  "removed_section": "Code and Run Instructions",
+  "removed_links": 4,
+  "remaining_content_preserved_exactly": true,
+  "body_matches_report": true,
+  "cjk_characters": 0,
+  "sharing_permissions_changed": false,
+  "previous_validation_snapshot": "google-doc-validation.json"
+}

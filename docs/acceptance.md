@@ -131,10 +131,13 @@ release record is kept in [validation.json](validation.json).
 Historical English-only validation (2026-10-10): **193 tests passed**, no failures or
 skips. All 74 current project text files and filenames have zero Han-character
 matches. At that time, the English native report matched the historical
-[report.md](report.md) and retained six section headings/four links. The updated
-experiment report was synchronized to the native Google Doc on 2026-10-12;
-readback verified the body, six native headings, four original links and zero
-Han characters. See [the document validation](evidence/2026-10-12-real-experiment/google-doc-validation.json).
+[report.md](report.md) and retained six section headings/four links. The initial
+experiment-report synchronization on 2026-10-12 also verified six native headings,
+four original links and zero Han characters; [that document validation](evidence/2026-10-12-real-experiment/google-doc-validation.json)
+is a historical record. The current report retains five section headings after
+the user-requested removal of the entire "Code and Run Instructions" section
+and its four links. Current native-Doc synchronization uses this five-section
+local mirror.
 Fixed upstream checkouts are
 outside the project repository; the same official comparator bytes and source
 pins are preserved. Runtime revision `85adec55f5825c38af63d7a328cd146f2d02ee24`

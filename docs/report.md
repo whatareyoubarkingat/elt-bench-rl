@@ -33,13 +33,3 @@ The 32-turn adjustment is an experiment override; the default remains 24. These 
 A shared $10 ledger reserves requests, retains uncertain costs and includes a $0.50 storage buffer plus the prior key-check estimate. The final uncached token estimate is $0.448166396, or $0.948166396 including the buffer; this is not an invoice. Four checkpoints total 1,167,002,514 bytes without TTL, projected at $0.1167/month; the ledger is not a lifetime storage cap. A private watchdog records PID/group, durable progress, logs and timeouts; its own heartbeats do not count as progress. The old optional Airbyte/Colima VM was deleted on 2026-10-10; it is not part of the running local route.
 
 DuckDB retains official Databricks task source/reference bytes. Credentialed-warehouse acceptance is unconfirmed. One real update and strict pre-update pipelines are verified; general quality gains and full assignment acceptance are not claimed. Public evidence is in docs/evidence/2026-10-12-real-experiment.
-
-## Code and Run Instructions
-
-[GitHub Repository](https://github.com/whatareyoubarkingat/elt-bench-rl)
-
-[Implementation and Run Commands](https://github.com/whatareyoubarkingat/elt-bench-rl/blob/main/docs/running.md)
-
-[Official ELT-Bench](https://github.com/uiuc-kang-lab/ELT-Bench)
-
-[Tinker Cookbook RL](https://tinker-docs.thinkingmachines.ai/cookbook/rl/)
