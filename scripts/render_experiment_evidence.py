@@ -17,6 +17,7 @@ def read_json(path):
 def render(run_dir: Path, output: Path) -> None:
     manifest = read_json(run_dir / "experiment-manifest.json")
     budget = read_json(run_dir / "budget.json")
+    verification = read_json(run_dir / "checkpoint-verification" / "verification.json")
     phases = []
     for path in sorted(run_dir.iterdir()):
         if not path.is_dir() or not (path / "monitor-status.json").exists():
@@ -82,6 +83,7 @@ def render(run_dir: Path, output: Path) -> None:
         "storage_buffer_usd": budget.get("storage_buffer_usd"),
         "remaining_after_reservations_usd": budget.get("remaining_usd"),
         "phases": phases,
+        "checkpoint_verification": verification,
         "evidence_note": "Rendered from local experiment records; this is not the Tinker console or an invoice.",
     }
     output.mkdir(parents=True, exist_ok=True)
@@ -95,8 +97,11 @@ def render(run_dir: Path, output: Path) -> None:
     def card(label, value):
         return f'<div class="card"><small>{show(label)}</small><strong>{show(value)}</strong></div>'
 
+    def label(key):
+        return key.replace("_", " ").capitalize()
+
     cards = "".join(
-        card(key, summary[key])
+        card(label(key), summary[key])
         for key in (
             "experiment_status",
             "model",
@@ -108,7 +113,7 @@ def render(run_dir: Path, output: Path) -> None:
     sections = []
     for phase in phases:
         rows = "".join(
-            f"<tr><th>{show(key)}</th><td>{show(value)}</td></tr>"
+            f"<tr><th>{show(label(key))}</th><td>{show(value)}</td></tr>"
             for key, value in phase.items()
             if key != "progress_sha256"
         )
@@ -136,6 +141,56 @@ def render(run_dir: Path, output: Path) -> None:
         + "</main></html>"
     )
     (output / "index.html").write_text(document)
+    train_phase = manifest.get("phases", {}).get("train-01", {})
+    proof_values = {
+        "Task": "Official trains / DuckDB adaptation",
+        "Model": summary["model"],
+        "Strict model successes": train_phase.get("strict_model_successes", 0),
+        "Group rewards": [round(value, 3) for value in train_phase.get("rewards", [])],
+        "Optimizer completed": train_phase.get("optimizer_completed", False),
+        "Checkpoint verification": verification.get("status", "pending"),
+        "Effective action tokens": verification.get("original_effective_action_tokens"),
+        "Fixed action logprob change": verification.get("probe_max_abs_logprob_delta"),
+        "State checkpoint reloaded": verification.get("state_load_verified"),
+        "Token estimate (USD)": round(summary["token_cost_estimate_usd"], 6),
+    }
+    proof_rows = "".join(
+        f"<p><small>{show(key)}</small><strong>{show(value)}</strong></p>"
+        for key, value in proof_values.items()
+        if value is not None
+    )
+    (output / "proof.html").write_text(
+        '<!doctype html><html lang="en"><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        "<title>Recorded ELT-Bench experiment evidence</title>"
+        "<style>body{font:12px system-ui;margin:10px;color:#17304b;background:#f5f7fa}"
+        "main{max-width:178px}h1{font-size:16px}p{background:white;"
+        "padding:5px;border:1px solid #dde4ed;border-radius:6px;margin:5px 0}"
+        "small,strong{display:block;overflow-wrap:anywhere}small{color:#526477;"
+        "font-size:10px}strong{margin-top:2px}</style><main>"
+        "<h1>ELT-Bench real experiment</h1>"
+        "<small>Recorded local evidence. Not the Tinker console or an invoice.</small>"
+        + proof_rows
+        + f"<small>Run: 2026-10-12<br>Source: {show(summary['source_revision'])}</small>"
+        "</main></html>"
+    )
+    update_values = {
+        "Verification": verification.get("status", "pending"),
+        "Model": summary["model"],
+        "Optimizer completed": verification.get("original_optimizer_completed"),
+        "Effective action tokens": verification.get("original_effective_action_tokens"),
+        "Fixed action logprob change": verification.get("probe_max_abs_logprob_delta"),
+        "State checkpoint reloaded": verification.get("state_load_verified"),
+        "Optimizer repeated": verification.get("optimizer_repeated"),
+    }
+    update_rows = "".join(
+        f"<p><small>{show(key)}</small><strong>{show(value)}</strong></p>"
+        for key, value in update_values.items()
+        if value is not None
+    )
+    (output / "update-proof.html").write_text(
+        (output / "proof.html").read_text().replace(proof_rows, update_rows)
+    )
     print(
         json.dumps({"evidence_page": str(output / "index.html"), "phases": len(phases)})
     )

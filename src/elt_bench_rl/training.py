@@ -7,6 +7,7 @@ tests; they must never be presented as evidence of a credentialed Tinker run.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import math
 import os
@@ -505,7 +506,7 @@ class _ObservedFuture:
 
     async def result_async(self):
         try:
-            return await _remote(
+            result = await _remote(
                 self.phase,
                 self.inner.result_async,
                 self.config,
@@ -513,6 +514,17 @@ class _ObservedFuture:
                 reservation=self.reservation,
                 input_tokens=self.tokens,
             )
+            if self.phase == "optimizer_wait":
+                self.progress(
+                    {
+                        "event": "optimizer_response",
+                        "response": {
+                            "metrics": getattr(result, "metrics", None),
+                            "type": getattr(result, "type", None),
+                        },
+                    }
+                )
+            return result
         finally:
             self.settled = True
 
@@ -591,6 +603,7 @@ def _trace(
                         "observation": renderer.tokenizer.decode(
                             transition.ob.to_ints()
                         ),
+                        "observation_tokens": transition.ob.to_ints(),
                         "action": renderer.tokenizer.decode(transition.ac.tokens),
                         "action_tokens": transition.ac.tokens,
                         "sampled_logprobs": transition.ac.logprobs,
@@ -686,6 +699,42 @@ async def _load_state_checkpoint(
     }
 
 
+async def _fresh_state_checkpoint(
+    service, config, progress, path, *, previous_model_id=None
+):
+    """Restore optimizer state into a new model, as required by LoadWeights.
+
+    The server permits legacy load only immediately after model creation, at
+    seq_id 1. Loading back into a client that has trained/saved is rejected.
+    The public create-from-state method handles both server creation protocols.
+    """
+    if service is None:
+        raise ValueError("Injected training requires an explicit checkpoint_service")
+    sync = getattr(service, "create_training_client_from_state_with_optimizer", None)
+    kwargs = {"base_model": config.model_name}
+    call = (
+        (lambda: asyncio.to_thread(sync, path, **kwargs))
+        if callable(sync)
+        else (
+            lambda: service.create_training_client_from_state_with_optimizer_async(
+                path, **kwargs
+            )
+        )
+    )
+    loaded = await _remote("state_load_verify", call, config, progress)
+    model_id = getattr(loaded, "model_id", None)
+    if not model_id or model_id == previous_model_id:
+        raise NoWeightUpdateError(
+            "Checkpoint verification did not return a new loaded model"
+        )
+    return {
+        "path": path,
+        "model_id": str(model_id),
+        "type": "fresh_client_optimizer_restore",
+        "optimizer_restored": True,
+    }
+
+
 async def rollout(
     config: TrainingConfig | Mapping[str, Any],
     *,
@@ -764,10 +813,15 @@ async def train(
     episode_factory: EpisodeFactory | None = None,
     completer_factory: Callable[[tinker.SamplingClient], TokenCompleter] | None = None,
     budget: TokenBudget | None = None,
+    checkpoint_service: tinker.ServiceClient | None = None,
 ) -> TrainingResult:
     config = _config(config)
     config.validate(training=True)
-    injected = training_client is not None
+    injected = training_client is not None or checkpoint_service is not None
+    if training_client is None and checkpoint_service is not None:
+        raise ValueError(
+            "checkpoint_service is an injection seam for offline training clients"
+        )
     if training_client is None and not allow_paid:
         raise PaidAccessRequired("Real Tinker optimization requires allow_paid=True")
     renderer = renderer or load_renderer(config)
@@ -791,6 +845,7 @@ async def train(
             progress,
             service,
             injected,
+            checkpoint_service,
         )
         progress({"event": "training_end", "effective_update": result.effective_update})
         status = "success"
@@ -814,6 +869,7 @@ async def _train_impl(
     progress,
     service,
     injected,
+    checkpoint_service,
 ):
     dataset = ELTDatasetBuilder(
         episode_configs=[dict(config.episode_config)],
@@ -1029,16 +1085,6 @@ async def _train_impl(
         )
         delta = float(np.max(np.abs(after - before)))
         updated = delta > config.update_tolerance
-        # Round-trip the exact state just saved, including optimizer state.
-        # This does not rewind: it restores the current completed step.
-        state_load_response = await _remote(
-            "state_load_verify",
-            lambda paths=paths: _load_state_checkpoint(
-                training_client, paths["state_path"]
-            ),
-            config,
-            progress,
-        )
         step_evidence = {
             "step": step + 1,
             "rewards": group.get_total_rewards() if group else [],
@@ -1049,10 +1095,32 @@ async def _train_impl(
             "probe_max_abs_logprob_delta": delta,
             "probe_tolerance": config.update_tolerance,
             "effective_update": updated,
-            "state_load_verified": True,
-            "state_load_response": state_load_response,
+            "state_load_verified": False,
             **paths,
         }
+        # Persist completed optimizer/probe facts before any additional API
+        # verification; a late reload error must not erase a real update.
+        _write_json(
+            log_path / "optimizer_evidence.json",
+            {
+                "status": "checkpoint_verification_pending",
+                "step": step_evidence,
+                "probe_before_logprobs": before.tolist(),
+                "probe_after_logprobs": after.tolist(),
+                "injected_runtime": injected,
+            },
+        )
+        progress({"event": "probe_comparison", **step_evidence})
+        state_load_response = await _fresh_state_checkpoint(
+            service or checkpoint_service,
+            config,
+            progress,
+            paths["state_path"],
+            previous_model_id=getattr(training_client, "model_id", None),
+        )
+        step_evidence.update(
+            state_load_verified=True, state_load_response=state_load_response
+        )
         steps.append(step_evidence)
         _append_json(log_path / "metrics.jsonl", step_evidence)
         _write_json(
@@ -1078,3 +1146,224 @@ async def _train_impl(
     )
     _write_json(evidence_path, result.as_dict() | {"status": "verified_update"})
     return result
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
+def _recovery_probe(training_run: Path, config: TrainingConfig, renderer: Renderer):
+    """Use recorded model tokens; never generate actions or consult references."""
+    files = (
+        "training_config.json",
+        "checkpoints.jsonl",
+        "train_rollouts.jsonl",
+        "progress.jsonl",
+        "metrics.jsonl",
+        "manifest.json",
+    )
+    hashes = {
+        name: hashlib.sha256((training_run / name).read_bytes()).hexdigest()
+        for name in files
+    }
+    recorded = json.loads((training_run / "training_config.json").read_text())
+    if recorded["model_name"] != config.model_name or recorded[
+        "renderer_name"
+    ] != _renderer_name(config):
+        raise ValueError(
+            "Verification model/renderer differs from the recorded training run"
+        )
+    checkpoints = _read_jsonl(training_run / "checkpoints.jsonl")
+    initial = [record for record in checkpoints if record.get("name") == "initial"]
+    updated = [record for record in checkpoints if record.get("step", 0) > 0]
+    if len(initial) != 1 or not updated:
+        raise ValueError("Verification requires initial and completed-step checkpoints")
+    latest = updated[-1]
+    groups = _read_jsonl(training_run / "train_rollouts.jsonl")
+    group = groups[-1]
+    events = _read_jsonl(training_run / "progress.jsonl")
+    if not any(
+        event.get("event") == "remote_end" and event.get("phase") == "optimizer_wait"
+        for event in events
+    ):
+        raise ValueError("Recorded optimizer completion evidence is missing")
+    stats = [
+        row
+        for row in _read_jsonl(training_run / "metrics.jsonl")
+        if row.get("step") == group["step"] and row.get("attempt") == group["attempt"]
+    ]
+    if not stats or stats[-1].get("effective_action_tokens", 0) <= 0:
+        raise NoLearningSignalError(
+            "Recorded run lacks nonzero effective training advantages"
+        )
+    mean = float(np.mean(group["rewards"]))
+    transitions = [
+        transition
+        for trajectory, reward in zip(
+            group["trajectories"], group["rewards"], strict=True
+        )
+        if reward != mean
+        for transition in trajectory["transitions"]
+        if transition["action_tokens"]
+    ]
+    if not transitions:
+        raise NoLearningSignalError(
+            "Recorded rollout lacks an action with nonzero trajectory advantage"
+        )
+    # Fix this rule before any checkpoint probe. A longer recorded action
+    # covers more actual decision tokens than a ubiquitous initial tool call.
+    transition = max(transitions, key=lambda row: len(row["action_tokens"]))
+    observation = transition["observation"]
+    prompt_tokens = renderer.tokenizer.encode(observation, add_special_tokens=False)
+    if renderer.tokenizer.decode(prompt_tokens) != observation:
+        raise ValueError(
+            "Recorded observation does not round-trip through the pinned tokenizer"
+        )
+    exact = transition.get("observation_tokens")
+    if exact is not None and list(prompt_tokens) != exact:
+        raise ValueError(
+            "Reencoded observation differs from the recorded exact token IDs"
+        )
+    action_tokens = transition["action_tokens"]
+    samples = [
+        event
+        for event in events
+        if event.get("event") == "sample_end"
+        and event.get("step") == group["step"]
+        and event.get("attempt") == group["attempt"]
+        and event.get("action_tokens") == action_tokens
+        and event.get("prompt_tokens") == len(prompt_tokens)
+    ]
+    if not samples:
+        raise ValueError(
+            "Recorded sampling evidence does not match the reconstructed prompt/action"
+        )
+    full = list(prompt_tokens) + action_tokens
+    mask = np.asarray([False] * (len(prompt_tokens) - 1) + [True] * len(action_tokens))
+    original_manifest = json.loads((training_run / "manifest.json").read_text())
+    provenance = {
+        "original_training_run": str(training_run),
+        "original_source_revision": original_manifest.get("source_revision"),
+        "original_manifest_status": original_manifest.get("status"),
+        "source_sha256": hashes,
+        "original_injected_runtime": recorded.get("injected_runtime"),
+        "original_optimizer_completed": True,
+        "original_rewards": group["rewards"],
+        "original_effective_action_tokens": stats[-1]["effective_action_tokens"],
+        "original_training_input_tokens": stats[-1].get("training_input_tokens"),
+        "prompt_tokens": len(prompt_tokens),
+        "action_tokens": action_tokens,
+        "probe_selection_rule": "longest_recorded_action_with_nonzero_trajectory_advantage",
+        "probe_sequence_sha256": hashlib.sha256(json.dumps(full).encode()).hexdigest(),
+        "token_provenance": "exact_recorded_tokens"
+        if exact is not None
+        else "decoded_observation_roundtrip_and_recorded_length",
+    }
+    return initial[0], latest, tinker.ModelInput.from_ints(full), mask, provenance
+
+
+async def verify_checkpoint(
+    config: TrainingConfig | Mapping[str, Any],
+    *,
+    training_run: Path | str,
+    allow_paid: bool = False,
+    service_client: tinker.ServiceClient | None = None,
+    renderer: Renderer | None = None,
+    budget: TokenBudget | None = None,
+) -> dict[str, Any]:
+    """Verify a completed saved update without sampling rollouts or optimizing.
+
+    Writes new verification evidence only. The original failed/succeeded run is
+    immutable input, including its manifest and checkpoint records.
+    """
+    config = _config(config)
+    config.validate(training=False)
+    injected = service_client is not None
+    if service_client is None and not allow_paid:
+        raise PaidAccessRequired(
+            "Real checkpoint verification requires allow_paid=True"
+        )
+    source = Path(training_run).resolve()
+    output = Path(config.log_path).resolve()
+    if output == source or output.is_relative_to(source):
+        raise ValueError(
+            "Verification output must be separate from the original training run"
+        )
+    renderer = renderer or load_renderer(config)
+    initial, updated, prompt, mask, provenance = _recovery_probe(
+        source, config, renderer
+    )
+    if not injected and provenance["original_injected_runtime"] is not False:
+        raise ValueError(
+            "Real verification requires an original run without injected runtime"
+        )
+    output.mkdir(parents=True, exist_ok=True)
+    progress = DurableProgress(output, injected_runtime=injected)
+    progress.context.update(
+        renderer_name=_renderer_name(config), verification_only=True
+    )
+    service = service_client
+    status = "errored"
+    try:
+        progress({"event": "checkpoint_verification_start", **provenance})
+        if service is None:
+            service = tinker.ServiceClient()
+        before_client = await _create_sampler(
+            service, config, progress, model_path=initial["sampler_path"]
+        )
+        before = await _probe_logprobs(
+            before_client, prompt, mask, config, progress, budget
+        )
+        after_client = await _create_sampler(
+            service, config, progress, model_path=updated["sampler_path"]
+        )
+        after = await _probe_logprobs(
+            after_client, prompt, mask, config, progress, budget
+        )
+        delta = float(np.max(np.abs(after - before)))
+        result = {
+            **provenance,
+            "status": "checkpoint_verification_pending",
+            "injected_runtime": injected,
+            "verification_only": True,
+            "optimizer_repeated": False,
+            "renderer_name": _renderer_name(config),
+            "initial_sampler_path": initial["sampler_path"],
+            "sampler_path": updated["sampler_path"],
+            "state_path": updated["state_path"],
+            "probe_before_logprobs": before.tolist(),
+            "probe_after_logprobs": after.tolist(),
+            "probe_action_tokens": len(before),
+            "probe_max_abs_logprob_delta": delta,
+            "probe_tolerance": config.update_tolerance,
+            "effective_update": delta > config.update_tolerance,
+            "state_load_verified": False,
+        }
+        _write_json(output / "verification.json", result)
+        progress({"event": "probe_comparison", "probe_max_abs_logprob_delta": delta})
+        loaded = await _fresh_state_checkpoint(
+            service, config, progress, updated["state_path"]
+        )
+        result.update(
+            status="verified_saved_update"
+            if result["effective_update"]
+            else "update_unverified",
+            state_load_verified=True,
+            state_load_response=loaded,
+        )
+        _write_json(output / "verification.json", result)
+        if not result["effective_update"]:
+            raise NoWeightUpdateError(
+                "Saved sampler checkpoints lack observable action-logprob changes"
+            )
+        progress({"event": "checkpoint_verification_end", "effective_update": True})
+        status = "success"
+        return result
+    except BaseException as error:
+        if isinstance(error, asyncio.CancelledError):
+            status = "interrupted"
+        _failure(output, progress, error)
+        raise
+    finally:
+        if not injected:
+            await _close_service(service, status, config, progress)

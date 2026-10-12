@@ -23,7 +23,9 @@ from elt_bench_rl.training import (
     PaidAccessRequired,
     TrainingConfig,
     rollout,
-    train,
+)
+from elt_bench_rl.training import (
+    train as train_recipe,
 )
 
 
@@ -83,6 +85,9 @@ class TrainingClient:
         self.optim_calls = []
         self.probes = []
         self.load_calls = []
+        self.model_id = "offline-original-model"
+        self.verifications = []
+        self.verification_error = None
 
     async def save_state_async(self, name, ttl_seconds=None):
         self.events.append(f"submit:state:{name}")
@@ -149,6 +154,37 @@ class TrainingClient:
         )
 
 
+class CheckpointService:
+    """SDK-shaped fresh-client verification; never reload the trained client."""
+
+    def __init__(self, parent):
+        self.parent = parent
+
+    async def create_training_client_from_state_with_optimizer_async(
+        self, path, **kwargs
+    ):
+        self.parent.verifications.append(path)
+        if self.parent.verification_error is not None:
+            raise self.parent.verification_error
+        fresh = TrainingClient()
+        fresh.weight = self.parent.saved[path]
+        fresh.model_id = "offline-restored-model"
+        return fresh
+
+    async def create_sampling_client_async(self, model_path, retry_config=None):
+        assert retry_config.enable_retry_logic is False
+        return SamplingClient(self.parent, self.parent.saved[model_path])
+
+
+async def train(config, **kwargs):
+    """Every injected test client gets an explicit offline verification service."""
+    if kwargs.get("training_client") is not None:
+        kwargs.setdefault(
+            "checkpoint_service", CheckpointService(kwargs["training_client"])
+        )
+    return await train_recipe(config, **kwargs)
+
+
 def factory_with_rewards(rewards):
     episodes = []
 
@@ -198,7 +234,8 @@ async def test_execution_reward_reaches_real_cookbook_optimizer(config, renderer
     assert result.steps[0]["absolute_effective_advantage"] > 0
     assert result.steps[0]["probe_max_abs_logprob_delta"] == pytest.approx(0.001)
     assert len(client.probes) == 2 and client.probes[0][1] == client.probes[1][1]
-    assert client.load_calls == [result.state_path]
+    assert client.load_calls == []
+    assert client.verifications == [result.state_path]
     assert result.steps[0]["state_load_verified"] is True
     assert result.steps[0]["state_load_response"]["path"] == result.state_path
     assert all(episode.close_count == 1 for episode in episodes)
@@ -327,7 +364,8 @@ async def test_resume_loads_optimizer_state_before_rollouts(config, renderer):
         episode_factory=factory,
         completer_factory=lambda _: SubmitCompleter(renderer),
     )
-    assert client.load_calls == [resume, result.state_path]
+    assert client.load_calls == [resume]
+    assert client.verifications == [result.state_path]
     assert client.probes[0][0] == pytest.approx(0.123)
     assert client.probes[1][0] == pytest.approx(0.124)
     assert client.events[:2] == ["submit:load_state", "await:load_state"]
@@ -339,10 +377,7 @@ async def test_state_save_response_without_successful_load_is_not_verified(
 ):
     client = TrainingClient()
 
-    async def unreadable(_path):
-        raise RuntimeError("Saved checkpoint cannot be loaded")
-
-    client.load_state_with_optimizer_async = unreadable
+    client.verification_error = RuntimeError("Saved checkpoint cannot be loaded")
     factory, _episodes = factory_with_rewards([0, 0.25, 0.75, 1])
     with pytest.raises(RuntimeError, match="cannot be loaded"):
         await train(
@@ -354,6 +389,11 @@ async def test_state_save_response_without_successful_load_is_not_verified(
         )
     assert len(client.optim_calls) == 1
     assert not (Path(config.log_path) / "training_result.json").exists()
+    saved = json.loads((Path(config.log_path) / "optimizer_evidence.json").read_text())
+    assert saved["status"] == "checkpoint_verification_pending"
+    assert saved["step"]["optimizer_completed"] and saved["step"]["effective_update"]
+    assert saved["step"]["state_load_verified"] is False
+    assert saved["probe_before_logprobs"] != saved["probe_after_logprobs"]
 
 
 @pytest.mark.asyncio
@@ -735,3 +775,100 @@ async def test_owned_service_closes_on_constant_reward_failure(
         event.get("phase") == "session_close" and event["event"] == "remote_end"
         for event in events
     )
+
+
+@pytest.mark.asyncio
+async def test_saved_update_recovery_never_repeats_optimizer_or_mutates_source(
+    config, renderer
+):
+    client = TrainingClient()
+    factory, _episodes = factory_with_rewards([0, 0.25, 0.75, 1])
+    await train(
+        config,
+        training_client=client,
+        renderer=renderer,
+        episode_factory=factory,
+        completer_factory=lambda _: SubmitCompleter(renderer),
+    )
+    source = Path(config.log_path)
+    (source / "manifest.json").write_text(
+        json.dumps({"source_revision": "fixture-revision", "status": "failed"})
+    )
+    # Exercise the older trace format used by the actual interrupted run.
+    groups = training._read_jsonl(source / "train_rollouts.jsonl")
+    for group in groups:
+        for trajectory in group["trajectories"]:
+            for transition in trajectory["transitions"]:
+                transition.pop("observation_tokens")
+    (source / "train_rollouts.jsonl").write_text(
+        "\n".join(json.dumps(group) for group in groups) + "\n"
+    )
+    snapshot = {
+        file.name: file.read_bytes() for file in source.iterdir() if file.is_file()
+    }
+    calls = len(client.optim_calls)
+    output = replace(config, log_path=config.log_path + "-verification")
+    budget = Budget()
+    result = await training.verify_checkpoint(
+        output,
+        training_run=source,
+        service_client=CheckpointService(client),
+        renderer=renderer,
+        budget=budget,
+    )
+    assert len(client.optim_calls) == calls
+    assert result["status"] == "verified_saved_update"
+    assert result["state_load_verified"] is True
+    assert result["state_load_response"]["model_id"] != client.model_id
+    assert result["optimizer_repeated"] is False
+    assert result["original_manifest_status"] == "failed"
+    assert result["injected_runtime"] is True
+    assert (
+        result["token_provenance"]
+        == "decoded_observation_roundtrip_and_recorded_length"
+    )
+    assert result["probe_max_abs_logprob_delta"] == pytest.approx(0.001)
+    assert [r.operation for r in budget.reservations] == ["probe", "probe"]
+    assert all(r.completed is not None for r in budget.reservations)
+    assert {
+        file.name: file.read_bytes() for file in source.iterdir() if file.is_file()
+    } == snapshot
+    assert (
+        json.loads((Path(output.log_path) / "verification.json").read_text()) == result
+    )
+    assert not (Path(output.log_path) / "training_result.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_recovery_paid_gate_precedes_cloud_creation(config):
+    with pytest.raises(PaidAccessRequired):
+        await training.verify_checkpoint(config, training_run="absent-training-run")
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_recovery_rejects_corrupt_prompt_before_remote_calls(
+    config, renderer
+):
+    client = TrainingClient()
+    factory, _episodes = factory_with_rewards([0, 0.25, 0.75, 1])
+    await train(
+        config,
+        training_client=client,
+        renderer=renderer,
+        episode_factory=factory,
+        completer_factory=lambda _: SubmitCompleter(renderer),
+    )
+    source = Path(config.log_path)
+    (source / "manifest.json").write_text(json.dumps({"status": "failed"}))
+    groups = training._read_jsonl(source / "train_rollouts.jsonl")
+    groups[0]["trajectories"][0]["transitions"][0]["observation_tokens"][0] += 1
+    (source / "train_rollouts.jsonl").write_text(json.dumps(groups[0]) + "\n")
+    probes = len(client.probes)
+    with pytest.raises(ValueError, match="exact token IDs"):
+        await training.verify_checkpoint(
+            replace(config, log_path=config.log_path + "-verification"),
+            training_run=source,
+            service_client=CheckpointService(client),
+            renderer=renderer,
+        )
+    assert len(client.probes) == probes
