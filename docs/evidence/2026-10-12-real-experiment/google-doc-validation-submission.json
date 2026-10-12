@@ -10,9 +10,12 @@
   ],
   "body_matches_report": true,
   "updated_scope": [
-    "Training and Validation Evidence: spending and storage cost sentences removed"
+    "All five sections shortened; training section retains key results only"
   ],
-  "other_content_preserved_exactly": true,
+  "report_body_rewritten": true,
+  "title_and_heading_ids_preserved": true,
+  "previous_report_word_count": 778,
+  "report_word_count": 355,
   "spending_section_absent": true,
   "code_and_run_instructions_section_absent": true,
   "remaining_hyperlinks": 0,
