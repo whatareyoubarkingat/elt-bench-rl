@@ -204,6 +204,12 @@ class Episode:
         return self.task.public_prompt + (
             f"\nSQL dialect: {self.dialect}. "
             "Queries can read raw.<source> and transform.<model>. "
+            "In query, use these schema-qualified table names. "
+            "In write_model, raw.<source> table names or literal "
+            "{{ source('raw', 'name') }} Jinja references are accepted. "
+            "source(...) without Jinja braces is not a SQL table function. "
+            "Model names are lowercase identifiers without a schema prefix or dot. "
+            "Use query to inspect categorical values instead of guessing their labels. "
             "No shell or arbitrary file access is available. Loads replace tables. "
             "Use configure_load before execute_load for each source. "
             "write_model stores SQL; run_dbt materializes the models. "
@@ -249,14 +255,20 @@ class Episode:
             schema("list_tables", "List tables in this episode"),
             schema(
                 "query",
-                "Execute a read-only SQL query with bounded feedback",
+                "Execute read-only SQL using raw.<source> or transform.<model> tables; "
+                "inspect actual categorical values before choosing predicates",
                 {"sql": string},
                 ["sql"],
             ),
             schema(
                 "write_model",
-                "Write a dbt SELECT model; only literal ref/source Jinja allowed",
-                {"name": string, "sql": string},
+                "Write a dbt SELECT model. Name has no schema prefix or dot. "
+                "SQL may use raw.<source>, transform.<model>, or literal source/ref Jinja; "
+                "source(...) alone is not SQL",
+                {
+                    "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$"},
+                    "sql": string,
+                },
                 ["name", "sql"],
             ),
             schema("run_dbt", "Compile and execute all submitted dbt models"),
@@ -354,7 +366,13 @@ class Episode:
                 "truncated": len(frame) > self.query_rows,
             }
         if name == "write_model":
-            model = identifier(args["name"])
+            try:
+                model = identifier(args["name"])
+            except ValueError as error:
+                raise PolicyError(
+                    "Model names must be lowercase identifiers without a schema prefix or dot; "
+                    "use schema-qualified names only in SQL table references"
+                ) from error
             if model not in self.models and len(self.models) >= 16:
                 raise PolicyError("Model limit reached")
             sql = args["sql"]

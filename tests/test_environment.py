@@ -130,8 +130,32 @@ def test_public_prompt_states_dialect_and_submission_without_reference_values(ep
     assert "SQL dialect: duckdb" in prompt
     assert "configure_load before execute_load" in prompt
     assert "text-only final answer does not submit" in prompt
+    assert "source(...) without Jinja braces is not a SQL table function" in prompt
+    assert "Model names are lowercase identifiers" in prompt
+    assert "categorical values instead of guessing" in prompt
     assert str(episode.reference_root) not in prompt
     assert "ground_truth" not in prompt
+
+
+def test_invalid_model_name_reports_model_name_rules(episode):
+    result = episode.dispatch(
+        "write_model", {"name": "raw.cars", "sql": "SELECT * FROM raw.cars"}
+    )
+    assert result["ok"] is False
+    assert "without a schema prefix or dot" in result["error"]
+    assert not episode.models
+
+
+def test_exists_query_executes_with_episode_source_scoping(episode):
+    load_all(episode)
+    result = episode.dispatch(
+        "query",
+        {
+            "sql": "SELECT t.id FROM raw.train t WHERE EXISTS (SELECT 1 FROM raw.cars c WHERE c.train_id = t.id)"
+        },
+    )
+    assert result["ok"]
+    assert result["rows"] and result["columns"] == ["id"]
 
 
 def test_private_progress_snapshots_are_atomic_and_flush_before_publish(

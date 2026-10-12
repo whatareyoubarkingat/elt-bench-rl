@@ -473,12 +473,43 @@ async def test_dataset_builder_uses_offline_tokenizer_and_fixed_groups(
         {"max_constant_group_retries": 3},
         {"learning_rate": 0},
         {"max_sampled_tokens": 0},
+        {"renderer_name": "qwen3_disable_thinking"},
     ],
 )
 @pytest.mark.asyncio
 async def test_invalid_training_configuration_fails_before_clients(config, changes):
     with pytest.raises(ValueError):
         await train(replace(config, **changes))
+
+
+def test_renderer_override_uses_pinned_supported_name_offline(
+    config, renderer, monkeypatch
+):
+    from transformers import AutoTokenizer
+
+    calls = []
+
+    def tokenizer(path, **kwargs):
+        calls.append((path, kwargs))
+        return renderer.tokenizer
+
+    def get_renderer(name, tokenizer):
+        calls.append(name)
+        assert tokenizer is renderer.tokenizer
+        return renderer
+
+    monkeypatch.setattr(AutoTokenizer, "from_pretrained", tokenizer)
+    monkeypatch.setattr(training, "get_renderer", get_renderer)
+    disabled = replace(config, renderer_name="qwen3_5_disable_thinking")
+    disabled.validate(training=False)
+    assert training.load_renderer(disabled) is renderer
+    assert calls == [
+        (config.tokenizer_path, {"local_files_only": True, "trust_remote_code": False}),
+        "qwen3_5_disable_thinking",
+    ]
+    calls.clear()
+    assert training.load_renderer(config) is renderer
+    assert calls[-1] == "qwen3_5"
 
 
 class Reservation:

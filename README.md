@@ -33,8 +33,9 @@ credentialed official rollout.
 | Credential-free integration: extraction, dbt, feedback and replay | Passed locally |
 | Different execution rewards for correct and incorrect pipelines | Passed: 1.0 vs 0.628571 |
 | Cookbook environment, reward and optimizer integration | Offline tests passed; injected clients are labeled |
-| Model-generated rollout on the official `trains` task adapted to DuckDB | Not run: needs authorized real Tinker sampling |
-| Real Tinker optimization with nonzero advantages and model change | Not run: paid calls deliberately deferred |
+| Real Tinker credential check | Passed: `KEY_OK`, 18 input tokens and 3 output tokens; access only |
+| Model-generated rollout on the official `trains` task adapted to DuckDB | Formal experiment authorized; results pending |
+| Real Tinker optimization with nonzero advantages and model change | Formal experiment authorized; results pending |
 
 See the [concise English report](docs/report.md), [design](docs/design.md), [run commands](docs/running.md),
 [setup](docs/setup.md), and [validation boundaries](docs/acceptance.md).
@@ -63,17 +64,39 @@ cp -n configs/.env.example .env
 # Fill only TINKER_API_KEY locally.
 uv run --locked python scripts/fetch_tokenizer.py
 uv run --locked elt-rl preflight --destination duckdb --online
-uv run --locked elt-rl rollout --destination duckdb --allow-paid --output runs/official-local
-uv run --locked elt-rl train --destination duckdb --config configs/train.yaml --allow-paid --output runs/rl-one-step
+RUN_ROOT=runs/real-experiment-20261012
+uv run --locked elt-rl rollout --destination duckdb --allow-paid \
+  --budget-ledger "$RUN_ROOT/budget.json" --max-cost-usd 10 \
+  --output "$RUN_ROOT/rollout"
+uv run --locked elt-rl train --destination duckdb --config configs/train.yaml \
+  --allow-paid --budget-ledger "$RUN_ROOT/budget.json" --max-cost-usd 10 \
+  --output "$RUN_ROOT/train"
 ```
+
+Share the same ledger across rollout, training and recovery commands. It reserves
+each remote request before dispatch and keeps uncertain requests charged against
+the estimate. The $10 limit includes a $0.50 storage buffer and $0.000008955
+estimated prior key-check cost. These are uncached rate-card estimates, not an
+invoice or an account-level spending cap. Checkpoints currently have no TTL;
+their ongoing provider storage is billed separately from token reservations.
+See [budget and checkpoint details](docs/running.md#shared-budget-and-checkpoint-storage).
 
 The recipe reuses Cookbook rollouts, trajectory assembly, assistant token masks,
 reward-minus-group-mean advantages, `importance_sampling`, optimizer steps and
 checkpoint helpers. Defaults: Qwen3.5-4B, rank 16, four independent attempts,
-serial execution, one update. Constant groups are resampled at most twice;
+serial execution, one update, 24 turns and 8192 sampled tokens per attempt.
+Constant groups are resampled at most twice;
 zero effective advantage means no update. Fixed action-token logprobs must
 change after optimization before success is reported. No local GPU or model
 weights are required.
+
+For continuous local supervision, wrap each command in
+`scripts/monitor_experiment.py`, with matching watchdog `--run-dir` and CLI
+`--output`. It writes private PID/status evidence, stdout logs and an
+auto-refresh dashboard; default heartbeats are 15 seconds, stall timeout
+900 seconds and overall timeout 3600 seconds. Its own heartbeat files never
+count as experiment progress. [Monitoring commands](docs/running.md#watchdog-and-progress-evidence)
+include the shorter rollout timeout and HTTP proxy fallback.
 
 DuckDB commands start and stop their own local HTTP source automatically.
 The assignment explicitly requires Tinker, but does not mandate Databricks or
@@ -101,5 +124,6 @@ source checkouts live under `~/.cache/elt-bench-rl/upstreams` (override with
 `ELT_BENCH_RL_UPSTREAM_CACHE`); their multilingual examples are outside this
 repository. Cookbook is installed from its exact Git revision through `uv`.
 The [assignment](https://docs.google.com/document/d/1Rr9Y7wG93Fw-vEHgGMuALsIKZMyXO5zRPhlo4NtvrzQ/edit)
-requires a real credentialed rollout and a real RL update; these remain explicit
-future acceptance checks, not claims based on mocks.
+requires a real credentialed rollout and a real RL update. The successful key
+check establishes access; formal experiment outcomes remain pending until
+execution and model-update evidence have been reviewed.

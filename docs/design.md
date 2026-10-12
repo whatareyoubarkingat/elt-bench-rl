@@ -115,6 +115,38 @@ Full grading/replay occurs only at submission. Immutable public assets and
 tokenizers are cached, services reused, outputs capped, and all exits clean
 owned namespace resources. New destinations reuse the same episode/RL loop.
 
+## Budget and experiment supervision
+
+The CLI supplies one persistent `TokenBudget` when paid access is authorized.
+An explicit shared `--budget-ledger` path carries reservations across rollout,
+training and recovery commands; `--max-cost-usd 10` sets the experiment estimate.
+File locking and atomic writes prevent concurrent commands from allocating the
+same remaining allowance. Each sampling/probe/training request is reserved
+before dispatch. Completed requests settle to observed token counts; uncertain
+or timed-out requests retain their allowance, including across process failure.
+The estimate uses uncached Qwen3.5-4B rates, a $0.50 storage buffer and the prior
+key-check estimate of $0.000008955. It is not an invoice or account spending cap.
+
+The initial and updated state/sampler checkpoints are saved without a TTL;
+actual remote storage billing continues while they are retained. The fixed
+buffer neither measures storage nor caps its later charges. The recipe does not
+delete these evaluation artifacts automatically. Retention and provider billing
+require separate review; see [checkpoint management](https://tinker-docs.thinkingmachines.ai/tinker/howto/checkpoints/).
+
+`DurableProgress` flushes turn and remote-phase events to `progress.jsonl`.
+Remote waits are bounded. The separate local watchdog observes manifest/status
+and tool/dbt/grade changes, log activity and child CPU progress, with 15-second
+heartbeats, 900-second stall detection and a bounded phase wall limit. It owns
+the child process group and terminates only that group when needed, preserving
+private logs and PID/exit evidence. Its own heartbeat files do not extend the
+progress deadline. Activity and process completion are distinct from a verified
+reward or optimizer update. HTTP proxy fallback changes only child/process
+environment; it does not modify global settings.
+
+The minimal real Tinker key check returned `KEY_OK` (18 input, 3 output tokens).
+This confirms sampling access. Formal rollout and optimization outcomes remain
+pending; offline tests make no paid calls.
+
 Offline mocks do not prove real model sampling or training. A scripted DuckDB
 pipeline does not prove a model-generated official-task rollout. The current
 route adapts the official Databricks task specification and reference data to

@@ -28,7 +28,10 @@ from tinker_cookbook.completers import (
     TokenCompleter,
     TokensWithLogprobs,
 )
-from tinker_cookbook.model_info import get_recommended_renderer_name
+from tinker_cookbook.model_info import (
+    get_recommended_renderer_name,
+    get_recommended_renderer_names,
+)
 from tinker_cookbook.renderers import Renderer, get_renderer
 from tinker_cookbook.rl.data_processing import (
     assemble_training_data,
@@ -107,6 +110,7 @@ class TrainingConfig:
     load_checkpoint_path: str | None = None
     sampler_checkpoint_path: str | None = None
     remote_timeout_seconds: float = 300.0
+    renderer_name: str | None = None
 
     def validate(self, *, training: bool) -> None:
         for name in (
@@ -139,6 +143,13 @@ class TrainingConfig:
             or self.remote_timeout_seconds <= 0
         ):
             raise ValueError("remote_timeout_seconds must be finite and positive")
+        if self.renderer_name is not None and (
+            not isinstance(self.renderer_name, str)
+            or self.renderer_name not in get_recommended_renderer_names(self.model_name)
+        ):
+            raise ValueError(
+                "renderer_name must be a supported renderer for model_name"
+            )
         if self.load_checkpoint_path is not None and (
             not isinstance(self.load_checkpoint_path, str)
             or not self.load_checkpoint_path.startswith("tinker://")
@@ -200,7 +211,11 @@ def load_renderer(config: TrainingConfig) -> Renderer:
     tokenizer = AutoTokenizer.from_pretrained(
         config.tokenizer_path, local_files_only=True, trust_remote_code=False
     )
-    return get_renderer(get_recommended_renderer_name(config.model_name), tokenizer)
+    return get_renderer(_renderer_name(config), tokenizer)
+
+
+def _renderer_name(config: TrainingConfig) -> str:
+    return config.renderer_name or get_recommended_renderer_name(config.model_name)
 
 
 def _group_builder(
@@ -689,7 +704,7 @@ async def rollout(
     log_path = Path(config.log_path)
     log_path.mkdir(parents=True, exist_ok=True)
     progress = DurableProgress(log_path, injected_runtime=injected)
-    progress.context.update(step=0, attempt=0)
+    progress.context.update(step=0, attempt=0, renderer_name=_renderer_name(config))
     service = None
     status = "errored"
     try:
@@ -724,7 +739,10 @@ async def rollout(
             str(trace_path),
             injected,
         )
-        _write_json(log_path / "rollout_result.json", result.as_dict())
+        _write_json(
+            log_path / "rollout_result.json",
+            result.as_dict() | {"renderer_name": _renderer_name(config)},
+        )
         progress({"event": "rollout_end", "rewards": result.rewards})
         status = "success"
         return result
@@ -756,6 +774,7 @@ async def train(
     log_path = Path(config.log_path)
     log_path.mkdir(parents=True, exist_ok=True)
     progress = DurableProgress(log_path, injected_runtime=injected)
+    progress.context.update(renderer_name=_renderer_name(config))
     service = None
     status = "errored"
     try:
@@ -853,6 +872,7 @@ async def _train_impl(
         | {
             "task_id": config.episode_config.get("task_id"),
             "destination": config.episode_config.get("destination"),
+            "renderer_name": _renderer_name(config),
             "loss_fn": "importance_sampling",
             "advantage": "reward_minus_group_mean",
             "injected_runtime": injected,

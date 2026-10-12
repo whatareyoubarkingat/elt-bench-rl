@@ -6,6 +6,8 @@ import re
 
 import sqlglot
 from sqlglot import exp
+from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
+from sqlglot.optimizer.scope import Scope, traverse_scope
 
 from .errors import PolicyError
 
@@ -73,15 +75,30 @@ def validate_sql(
         raise ValueError("SQL parse error: " + str(error)[:500]) from error
     if len(statements) != 1 or not isinstance(statements[0], (exp.Select, exp.Union)):
         raise PolicyError("Only one SELECT query is allowed")
-    tree = statements[0]
-    ctes = {c.alias.lower() for c in tree.find_all(exp.CTE)}
+    tree = normalize_identifiers(statements[0], dialect=dialect)
+    # A CTE in one nested query must not authorize an unrelated bare table
+    # with the same name elsewhere in the statement.
+    cte_references = {
+        id(node)
+        for scope in traverse_scope(tree)
+        for alias, node in scope.references
+        if isinstance(node, exp.Table) and isinstance(scope.sources.get(alias), Scope)
+    }
     for table in tree.find_all(exp.Table):
+        if (
+            isinstance(table.this, exp.Anonymous)
+            and table.this.name.lower() == "source"
+        ):
+            raise PolicyError(
+                "source(...) is not a SQL table function. Use raw.<source> table names; "
+                "write_model also accepts literal {{ source('raw', 'name') }} Jinja."
+            )
         if not isinstance(table.this, exp.Identifier) or table.catalog:
             raise PolicyError(
                 "External tables, catalogs and table functions are forbidden"
             )
         schema, name = table.db.lower(), table.name.lower()
-        if not schema and name in ctes:
+        if not schema and id(table) in cte_references:
             continue
         if (schema == "raw" and name in sources) or (
             schema == "transform" and name in models
@@ -91,6 +108,10 @@ def validate_sql(
             "Query can access only this episode's raw sources and transform models"
         )
     for func in tree.find_all(exp.Func):
+        if isinstance(func, exp.Exists):
+            # EXISTS is a SQL predicate. Its entire subquery remains subject
+            # to the table, function and command checks in this traversal.
+            continue
         name = (
             func.name.upper()
             if isinstance(func, exp.Anonymous)

@@ -56,6 +56,68 @@ def test_nested_recursive_cte_is_rejected():
         validate_sql(sql, {"cars"}, {"trains"})
 
 
+@pytest.mark.parametrize("dialect", ["duckdb", "databricks"])
+def test_exists_is_allowed_only_with_episode_scoped_subqueries(dialect):
+    sql = """SELECT t.id FROM raw.train AS t
+        WHERE EXISTS (
+            SELECT 1 FROM raw.cars AS c WHERE c.train_id = t.id
+        )"""
+    assert validate_sql(sql, {"train", "cars"}, set(), dialect=dialect) == sql
+
+
+@pytest.mark.parametrize(
+    "inner_sql",
+    [
+        "SELECT 1 FROM other_namespace.cars",
+        "SELECT 1 FROM another_catalog.raw.cars",
+        "SELECT 1 FROM raw.unknown_source",
+        "SELECT 1 FROM transform.unknown_model",
+        "SELECT 1 FROM information_schema.tables",
+        "SELECT 1 FROM read_csv('/private/reference.csv')",
+        "SELECT 1 FROM read_parquet('https://example.org/private.parquet')",
+        "SELECT getenv('TINKER_API_KEY') FROM raw.cars",
+        "SELECT 1 INTO stolen FROM raw.cars",
+        "WITH RECURSIVE r AS (SELECT 1 UNION ALL SELECT * FROM r) SELECT * FROM r",
+        "SELECT EXISTS(SELECT 1 FROM other_namespace.cars) FROM raw.cars",
+    ],
+)
+def test_exists_does_not_hide_disallowed_subquery_capabilities(inner_sql):
+    with pytest.raises((PolicyError, ValueError)):
+        validate_sql(
+            f"SELECT t.id FROM raw.train t WHERE EXISTS ({inner_sql})",
+            {"train", "cars"},
+            set(),
+        )
+
+
+@pytest.mark.parametrize("helper", ["source('raw', 'cars')", 'SOURCE("raw", "cars")'])
+def test_bare_source_function_gets_reference_syntax_hint(helper):
+    with pytest.raises(
+        PolicyError, match=r"source.*not a SQL table function.*raw\.<source>"
+    ):
+        validate_sql(f"SELECT * FROM {helper}", {"cars"}, set())
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT 1 FROM private_table WHERE EXISTS (WITH private_table AS (SELECT id FROM raw.cars) SELECT 1 FROM private_table)",
+        "SELECT 1 FROM private_table UNION ALL SELECT 1 FROM (WITH private_table AS (SELECT id FROM raw.cars) SELECT 1 FROM private_table) local_query",
+    ],
+)
+def test_cte_names_cannot_authorize_tables_outside_their_query_scope(sql):
+    with pytest.raises(PolicyError, match="only this episode"):
+        validate_sql(sql, {"cars"}, set())
+
+
+@pytest.mark.parametrize("dialect", ["duckdb", "databricks"])
+def test_cte_reference_with_exists_is_resolved_case_insensitively(dialect):
+    sql = """WITH car_rows AS (SELECT train_id FROM raw.cars)
+        SELECT id FROM raw.train t
+        WHERE EXISTS (SELECT 1 FROM CAR_ROWS c WHERE c.train_id = t.id)"""
+    assert validate_sql(sql, {"cars", "train"}, set(), dialect=dialect) == sql
+
+
 def test_agent_sql_error_cannot_disguise_itself_as_infrastructure(
     monkeypatch, tmp_path
 ):
